@@ -113,7 +113,13 @@ function buildTicker() {
     else if (crowd >= 2) extra = ` <span class="packed">BUSY</span>`;
     return `${name} <span class="${cls}">${arrow} ${c >= 0 ? "+" : ""}${c.toFixed(0)}%</span>${extra}`;
   });
-  $("ticker").innerHTML = items.join(" · ") + " · " + items.join(" · ");
+  const el = $("ticker");
+  el.innerHTML = items.join(" · ") + " · " + items.join(" · ");
+  // Scale duration to ~40px/s so speed stays consistent regardless of content length
+  requestAnimationFrame(() => {
+    const w = el.scrollWidth / 2; // half because content is duplicated
+    el.style.animationDuration = Math.max(20, w / 40) + "s";
+  });
 }
 
 /* ===== HOW IT WORKS ===== */

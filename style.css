@@ -104,7 +104,7 @@ header {
 }
 .ticker {
   display: inline-block;
-  animation: tickerScroll 30s linear infinite;
+  animation: tickerScroll 90s linear infinite; /* JS overrides duration based on width ÷ 40px/s */
   padding-left: 100%;
 }
 .ticker-wrap:hover .ticker { animation-play-state: paused; }
