@@ -3,13 +3,16 @@ SNU Campus Exchange – single Lambda handler for HTTP API Gateway.
 Region: ap-southeast-2 | Runtime: Python 3.12
 Tables: Players, Checkins, Profiles, Memberships, Waves, Items, Ratings, Users
 Auth: PBKDF2 password hashing, HMAC-SHA256 signed tokens (7-day expiry)
+Routing: uses rawPath + requestContext.http.method (works with a single $default catch-all route)
 """
 import boto3, json, time, uuid, hashlib, hmac, os, base64
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.config import Config as BotoConfig
 
-ddb = boto3.resource("dynamodb", region_name="ap-southeast-2")
+REGION = "ap-southeast-2"
+
+ddb = boto3.resource("dynamodb", region_name=REGION)
 players     = ddb.Table("Players")
 checkins    = ddb.Table("Checkins")
 profiles    = ddb.Table("Profiles")
@@ -20,15 +23,15 @@ ratings     = ddb.Table("Ratings")
 users       = ddb.Table("Users")
 
 S3_BUCKET = os.environ.get("S3_BUCKET", "snu-campus-exchange-uploads")
-s3 = boto3.client("s3", region_name="ap-southeast-2", config=BotoConfig(signature_version="s3v4"))
+s3 = boto3.client("s3", region_name=REGION, config=BotoConfig(signature_version="s3v4"))
 
 AUTH_SECRET = os.environ.get("AUTH_SECRET", "dev-secret-change-me")
 TOKEN_EXPIRY = 7 * 24 * 3600  # 7 days
 
-HEADERS = {
+CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "*",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Content-Type": "application/json",
 }
 
@@ -87,29 +90,42 @@ class DecEncoder(json.JSONEncoder):
         return super().default(o)
 
 def resp(code, body):
-    return {"statusCode": code, "headers": HEADERS, "body": json.dumps(body, cls=DecEncoder)}
+    return {"statusCode": code, "headers": CORS_HEADERS, "body": json.dumps(body, cls=DecEncoder)}
 
 # Routes that do NOT require auth
-PUBLIC_ROUTES = {"POST /signup", "POST /login", "GET /leaderboard", "GET /crowd"}
+PUBLIC_PATHS = {
+    ("POST", "/signup"),
+    ("POST", "/login"),
+    ("GET", "/leaderboard"),
+    ("GET", "/crowd"),
+}
 
 def handler(event, context):
     try:
-        route = event.get("routeKey", "")
-        body  = json.loads(event.get("body") or "{}")
-        qs    = event.get("queryStringParameters") or {}
-        now   = int(time.time())
+        # --- Derive method + path from the event ---
+        http_ctx = (event.get("requestContext") or {}).get("http") or {}
+        method = http_ctx.get("method", event.get("httpMethod", "GET")).upper()
+        path   = event.get("rawPath", event.get("path", "/"))
+
+        # --- Handle OPTIONS (CORS preflight) ---
+        if method == "OPTIONS":
+            return resp(200, {"ok": True})
+
+        body = json.loads(event.get("body") or "{}")
+        qs   = event.get("queryStringParameters") or {}
+        now  = int(time.time())
 
         # --- Auth middleware ---
         email = None
         uname = None
-        if route not in PUBLIC_ROUTES:
+        if (method, path) not in PUBLIC_PATHS:
             user_info = get_user(event)
             if not user_info:
                 return resp(401, {"error": "Not authenticated. Please log in."})
             email, uname = user_info
 
         # ========== SIGNUP ==========
-        if route == "POST /signup":
+        if method == "POST" and path == "/signup":
             em = (body.get("email") or "").strip().lower()
             nm = (body.get("name") or "").strip()
             pw = body.get("password", "")
@@ -130,7 +146,7 @@ def handler(event, context):
             return resp(200, {"token": token, "email": em, "name": nm})
 
         # ========== LOGIN ==========
-        if route == "POST /login":
+        if method == "POST" and path == "/login":
             em = (body.get("email") or "").strip().lower()
             pw = body.get("password", "")
             if not em.endswith("@snu.edu.in"):
@@ -145,14 +161,14 @@ def handler(event, context):
             return resp(200, {"token": token, "email": em, "name": nm})
 
         # ---------- LEADERBOARD ----------
-        if route == "GET /leaderboard":
+        if method == "GET" and path == "/leaderboard":
             its = players.scan().get("Items", [])
             its.sort(key=lambda x: x.get("bestScore", 0), reverse=True)
             top = [{"username": i["username"], "bestScore": i["bestScore"]} for i in its[:10]]
             return resp(200, top)
 
         # ---------- SCORE ----------
-        if route == "POST /score":
+        if method == "POST" and path == "/score":
             score = Decimal(str(body["score"]))
             cur = players.get_item(Key={"username": email}).get("Item")
             if not cur or score > cur.get("bestScore", Decimal("0")):
@@ -161,7 +177,7 @@ def handler(event, context):
             return resp(200, {"updated": False, "bestScore": cur["bestScore"]})
 
         # ---------- CHECKIN ----------
-        if route == "POST /checkin":
+        if method == "POST" and path == "/checkin":
             real = body.get("real", False)
             count = 2 if real else 1
             for _ in range(count):
@@ -175,7 +191,7 @@ def handler(event, context):
             return resp(200, {"success": True})
 
         # ---------- CROWD ----------
-        if route == "GET /crowd":
+        if method == "GET" and path == "/crowd":
             cutoff = now - 1800
             its = checkins.scan(FilterExpression=Attr("timestamp").gte(cutoff)).get("Items", [])
             counts = {}
@@ -185,7 +201,7 @@ def handler(event, context):
             return resp(200, counts)
 
         # ---------- HERE ----------
-        if route == "GET /here":
+        if method == "GET" and path == "/here":
             place = qs.get("placeId", "")
             cutoff = now - 1800
             its = checkins.query(
@@ -195,7 +211,7 @@ def handler(event, context):
             return resp(200, {"users": user_list})
 
         # ---------- PROFILE ----------
-        if route == "POST /profile":
+        if method == "POST" and path == "/profile":
             profiles.put_item(Item={
                 "username":    email,
                 "displayName": uname,
@@ -207,7 +223,7 @@ def handler(event, context):
             return resp(200, {"success": True})
 
         # ---------- STUDENTS ----------
-        if route == "GET /students":
+        if method == "GET" and path == "/students":
             fe_parts, eav = [], {}
             if qs.get("department"):
                 fe_parts.append("department = :dept")
@@ -226,7 +242,7 @@ def handler(event, context):
             return resp(200, its)
 
         # ---------- JOIN ----------
-        if route == "POST /join":
+        if method == "POST" and path == "/join":
             memberships.put_item(Item={
                 "community": body["community"],
                 "username":  email,
@@ -234,7 +250,7 @@ def handler(event, context):
             return resp(200, {"success": True})
 
         # ---------- LEAVE ----------
-        if route == "POST /leave":
+        if method == "POST" and path == "/leave":
             memberships.delete_item(Key={
                 "community": body["community"],
                 "username":  email,
@@ -242,7 +258,7 @@ def handler(event, context):
             return resp(200, {"success": True})
 
         # ---------- COMMUNITIES ----------
-        if route == "GET /communities":
+        if method == "GET" and path == "/communities":
             its = memberships.scan().get("Items", [])
             counts = {}
             for i in its:
@@ -251,7 +267,7 @@ def handler(event, context):
             return resp(200, counts)
 
         # ---------- WAVE ----------
-        if route == "POST /wave":
+        if method == "POST" and path == "/wave":
             waves.put_item(Item={
                 "toUser":    body["toUser"],
                 "timestamp": now,
@@ -260,7 +276,7 @@ def handler(event, context):
             return resp(200, {"success": True})
 
         # ---------- WAVES ----------
-        if route == "GET /waves":
+        if method == "GET" and path == "/waves":
             its = waves.query(
                 KeyConditionExpression=Key("toUser").eq(email),
                 ScanIndexForward=False,
@@ -270,7 +286,7 @@ def handler(event, context):
             return resp(200, out)
 
         # ---------- UPLOAD URL (S3 presigned) ----------
-        if route == "POST /upload-url":
+        if method == "POST" and path == "/upload-url":
             key = "items/" + str(uuid.uuid4()) + ".jpg"
             url = s3.generate_presigned_url(
                 "put_object",
@@ -280,7 +296,7 @@ def handler(event, context):
             return resp(200, {"uploadUrl": url, "key": key})
 
         # ---------- POST ITEM (Lost & Found) ----------
-        if route == "POST /items":
+        if method == "POST" and path == "/items":
             item_id = str(uuid.uuid4())[:8]
             item = {
                 "itemId":      item_id,
@@ -300,7 +316,7 @@ def handler(event, context):
             return resp(200, {"success": True, "itemId": item_id})
 
         # ---------- GET ITEMS ----------
-        if route == "GET /items":
+        if method == "GET" and path == "/items":
             fe_parts, eav = [], {}
             if qs.get("placeId"):
                 fe_parts.append("placeId = :pid")
@@ -330,7 +346,7 @@ def handler(event, context):
             return resp(200, its[:50])
 
         # ---------- RESOLVE ITEM ----------
-        if route == "POST /items/resolve":
+        if method == "POST" and path == "/items/resolve":
             item_id = body.get("itemId", "")
             its = items.scan(FilterExpression=Attr("itemId").eq(item_id)).get("Items", [])
             if its:
@@ -346,7 +362,7 @@ def handler(event, context):
             return resp(200, {"success": True})
 
         # ---------- DELETE ITEM ----------
-        if route == "POST /items/delete":
+        if method == "POST" and path == "/items/delete":
             item_id = body.get("itemId", "")
             its = items.scan(FilterExpression=Attr("itemId").eq(item_id)).get("Items", [])
             if its:
@@ -357,7 +373,7 @@ def handler(event, context):
             return resp(200, {"success": True})
 
         # ---------- POST RATING ----------
-        if route == "POST /rating":
+        if method == "POST" and path == "/rating":
             ratings.put_item(Item={
                 "placeId":   body["placeId"],
                 "timestamp": now,
@@ -368,7 +384,7 @@ def handler(event, context):
             return resp(200, {"success": True})
 
         # ---------- GET RATINGS ----------
-        if route == "GET /ratings":
+        if method == "GET" and path == "/ratings":
             pid = qs.get("placeId", "")
             its = ratings.query(
                 KeyConditionExpression=Key("placeId").eq(pid),
@@ -386,7 +402,7 @@ def handler(event, context):
             top_tag = max(tags, key=tags.get) if tags else ""
             return resp(200, {"avg": round(avg, 1), "count": len(its), "topTag": top_tag})
 
-        return resp(404, {"error": "Unknown route: " + route})
+        return resp(404, {"error": f"Unknown route: {method} {path}"})
 
     except Exception as e:
         return resp(500, {"error": str(e)})

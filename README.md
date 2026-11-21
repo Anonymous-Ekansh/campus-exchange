@@ -10,10 +10,11 @@
 |---|---|
 | **Live Market** | Buy and sell shares of campus places; prices move with real crowd data |
 | **Real-time Crowd** | See which places are Quiet, Busy, or Packed right now |
-| **Lost & Found** | Report and find lost items tied to campus places |
+| **Lost & Found** | Report and find lost items tied to campus places, with photo uploads |
 | **Place Ratings** | Rate places after check-in with 1-5 stars and tags (Clean, Slow, Noisy, Great) |
 | **Connect** | Discover students across departments, wave at them, see who's here |
 | **Leaderboard** | Compete for the highest net worth across campus |
+| **Auth** | @snu.edu.in email/password accounts with PBKDF2 hashing and signed tokens |
 
 ## AWS Services
 
@@ -21,22 +22,22 @@
 |---|---|
 | **AWS Amplify** | Static site hosting (HTML/CSS/JS) |
 | **AWS Lambda** | Serverless backend (Python 3.12, single function) |
-| **API Gateway** | HTTP API with CORS |
-| **DynamoDB** | 8 on-demand tables: Players, Checkins, Profiles, Memberships, Waves, Items, Ratings, Users |
+| **API Gateway** | HTTP API — one `$default` catch-all route → Lambda |
+| **DynamoDB** | 8 on-demand tables (see below) |
 | **Amazon S3** | Photo uploads for Lost & Found items (presigned PUT URLs) |
 
 ## DynamoDB Tables
 
-| Table | PK | SK | Notes |
-|---|---|---|---|
-| Players | `username` (S) | — | bestScore |
-| Checkins | `placeId` (S) | `timestamp` (N) | TTL on `ttl`, supports `real` flag |
-| Profiles | `username` (S) | — | department, batch, interests, avatarColor |
-| Memberships | `community` (S) | `username` (S) | |
-| Waves | `toUser` (S) | `timestamp` (N) | fromUser |
-| Items | `itemId` (S) | — | Lost & Found: type, title, placeId, status, imageKey |
-| Ratings | `placeId` (S) | `timestamp` (N) | stars, tag |
-| Users | `email` (S) | — | Auth: name, salt, pwHash |
+| Table | PK | SK | TTL | Notes |
+|---|---|---|---|---|
+| Players | `username` (S) | — | — | bestScore, displayName |
+| Checkins | `placeId` (S) | `timestamp` (N) | `ttl` | username, real flag |
+| Profiles | `username` (S) | — | — | department, batch, interests, avatarColor, displayName |
+| Memberships | `community` (S) | `username` (S) | — | |
+| Waves | `toUser` (S) | `timestamp` (N) | — | fromUser |
+| Items | `itemId` (S) | — | — | type, title, placeId, status, imageKey, reportedBy |
+| Ratings | `placeId` (S) | `timestamp` (N) | — | stars, tag, username |
+| Users | `email` (S) | — | — | name, salt, pwHash, createdAt |
 
 ## Live URL
 
@@ -61,6 +62,6 @@ This sends 15 fake check-ins weighted towards the mess and library, so "Packed" 
 ## Architecture
 
 ```
-Browser (Amplify) → HTTP API Gateway (CORS: *) → Lambda (Python 3.12) → DynamoDB (8 tables)
-                                                                       → S3 (photo uploads)
+Browser (Amplify) → HTTP API Gateway ($default → Lambda) → DynamoDB (8 tables)
+                                                         → S3 (photo uploads)
 ```
