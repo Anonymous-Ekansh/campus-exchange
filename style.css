@@ -653,6 +653,16 @@ button:disabled { opacity: .45; cursor: default; }
 .lf-card .lf-time { font: 400 10px var(--mono); color: var(--dim); }
 .lf-card .lf-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
 .lf-contact-reveal { font: 400 11px var(--mono); color: var(--ink); margin-top: 6px; display: none; }
+.lf-mine-tag {
+  display: inline-block;
+  font: 700 10px var(--mono);
+  padding: 2px 8px;
+  background: var(--mag);
+  color: #fff;
+  letter-spacing: 1px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
 
 /* ============================================================
    MODALS
@@ -726,6 +736,27 @@ button:disabled { opacity: .45; cursor: default; }
 }
 #login h3 { font: 900 26px/1.1 var(--serif); margin-bottom: 8px; }
 #login p  { color: var(--dim); font-size: 13px; margin-bottom: 14px; }
+.auth-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border: 2px solid var(--ink);
+}
+.auth-mode {
+  flex: 1;
+  font: 700 12px var(--mono);
+  padding: 10px;
+  background: var(--bg);
+  border: none;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background .15s;
+}
+.auth-mode.active {
+  background: var(--mag);
+  color: #fff;
+}
+.auth-mode:not(.active):hover { background: #e8e5dc; }
 #login input {
   display: block;
   width: 100%;
@@ -736,6 +767,14 @@ button:disabled { opacity: .45; cursor: default; }
 }
 #login input:focus-visible { outline: 3px solid var(--mag); outline-offset: 2px; }
 #lerr { color: var(--down); font: 600 13px var(--mono); min-height: 20px; margin-bottom: 6px; }
+.user-info {
+  font: 400 12px var(--mono);
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
 
 .lb div {
   display: flex;

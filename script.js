@@ -71,19 +71,37 @@ function tint(h) {
   $("tint").setAttribute("fill", k < .5 ? a[1] : b[1]); $("tint").setAttribute("opacity", a[2] + (b[2] - a[2]) * k);
 }
 
+/* ===== AUTH STATE ===== */
+let AUTH_TOKEN = localStorage.getItem("snu_token");
+let AUTH_USER = JSON.parse(localStorage.getItem("snu_user") || "null"); // {email, name}
+const currentEmail = () => AUTH_USER ? AUTH_USER.email : "";
+const currentName = () => AUTH_USER ? AUTH_USER.name : "";
+
 /* ===== API helpers ===== */
 async function apiGet(path) {
-  const r = await fetch(API_URL + path);
+  const headers = {};
+  if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
+  const r = await fetch(API_URL + path, { headers });
+  if (r.status === 401) { logout(); throw new Error("Session expired"); }
   if (!r.ok) throw new Error(r.status);
   return r.json();
 }
 async function apiPost(path, body) {
+  const headers = { "Content-Type": "application/json" };
+  if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
   const r = await fetch(API_URL + path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(r.status);
+  if (r.status === 401) { logout(); throw new Error("Session expired"); }
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    const e = new Error(err.error || r.status);
+    e.status = r.status;
+    e.body = err;
+    throw e;
+  }
   return r.json();
 }
 
@@ -203,7 +221,7 @@ function initRealCheckin() {
   $("realCheckinBtn").onclick = () => {
     const pid = sel.value;
     if (!pid) { toast("Pick a place first!"); return; }
-    const user = ($("who").textContent || "anon").trim();
+    const user = currentEmail() || "anon";
     const key = pid + "_" + user;
     const now = Date.now();
     if (REAL_CHECKIN_COOLDOWN[key] && now - REAL_CHECKIN_COOLDOWN[key] < 600000) {
@@ -211,7 +229,7 @@ function initRealCheckin() {
     }
     REAL_CHECKIN_COOLDOWN[key] = now;
     if (apiOk()) {
-      apiPost("/checkin", { placeId: pid, username: user, real: true }).then(() => {
+      apiPost("/checkin", { placeId: pid, real: true }).then(() => {
         toast("📍 Checked in at " + P[pid].name + "!");
         fetchCrowd();
       }).catch(() => toast("Check-in failed. Try again."));
@@ -225,11 +243,10 @@ function initRealCheckin() {
 
 /* ===== SEED DEMO DATA (console function) ===== */
 window.seedDemoData = async function() {
-  const user = ($("who").textContent || "demo").trim();
   const weighted = ["dh1","dh1","dh1","dh2","dh2","dh2","lib","lib","lib","lib","nes","nes","grub","anb","cnd"];
   const promises = weighted.map(pid => {
     if (apiOk()) {
-      return apiPost("/checkin", { placeId: pid, username: user + Math.random().toString(36).slice(2,5), real: true });
+      return apiPost("/checkin", { placeId: pid, real: true });
     } else {
       CROWD_DATA[pid] = (CROWD_DATA[pid] || 0) + 2;
       return Promise.resolve();
@@ -303,8 +320,7 @@ function arrive(id) {
     news("Checked in at " + P[id].name + ": +₹100.");
     toast("✅ Checked in at " + P[id].name + "  +₹100");
     if (apiOk()) {
-      const username = $("who").textContent || "anon";
-      apiPost("/checkin", { placeId: id, username }).catch(() => {});
+      apiPost("/checkin", { placeId: id }).catch(() => {});
     }
     // Show rating card after check-in
     showRatingCard(id);
@@ -440,8 +456,7 @@ async function fetchPlaceRating(placeId) {
 
 /* ===== Players (localStorage + API) ===== */
 const DB_KEY = "snu_exchange_v1";
-const hashPin = s => { let h = 5381, g = 52711; for (const ch of s) { h = (h * 33 ^ ch.charCodeAt(0)) >>> 0; g = (g * 31 + ch.charCodeAt(0) * 7) >>> 0; } return h.toString(36) + g.toString(36); };
-const loadDB = () => { try { return JSON.parse(localStorage.getItem(DB_KEY)) || { users: {} } } catch (e) { return { users: {} } } };
+const loadDB = () => { try { return JSON.parse(localStorage.getItem(DB_KEY)) || { games: 0, best: null } } catch (e) { return { games: 0, best: null } } };
 const saveDB = db => { try { localStorage.setItem(DB_KEY, JSON.stringify(db)); return true } catch (e) { return false } };
 let PLAYER = null, REMOTE_LB = null;
 
@@ -449,47 +464,146 @@ async function fetchLeaderboard() {
   try {
     if (apiOk()) {
       const data = await apiGet("/leaderboard");
-      REMOTE_LB = data.map(r => ({ name: r.username, best: r.bestScore }));
+      REMOTE_LB = data.map(r => ({ name: r.displayName || r.username, best: r.bestScore }));
     }
   } catch (e) { /* silent, localStorage fallback */ }
   renderLb();
 }
 
 function renderLb() {
-  const rows = REMOTE_LB || Object.values(loadDB().users).filter(u => u.best !== null).sort((a, b) => b.best - a.best).slice(0, 10);
+  const rows = REMOTE_LB || (loadDB().best !== null ? [{ name: currentName(), best: loadDB().best }] : []);
   const html = rows.length ? rows.map((u, i) => `<div><span>${i + 1}. ${(u.name || "").replace(/[<>&]/g, "")}</span><b>${inr(u.best)}</b></div>`).join("") : `<div class="empty-sticker">🏆 No scores yet. Be the first.</div>`;
   $("lb").innerHTML = html; $("endLb").innerHTML = html;
 }
+
+/* ===== AUTH UI ===== */
+let authMode = "login"; // "login" or "signup"
+
+function setupAuthToggle() {
+  const loginBtn = $("authLoginBtn"), signupBtn = $("authSignupBtn");
+  if (!loginBtn || !signupBtn) return;
+  loginBtn.onclick = () => setAuthMode("login");
+  signupBtn.onclick = () => setAuthMode("signup");
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const loginBtn = $("authLoginBtn"), signupBtn = $("authSignupBtn");
+  loginBtn.classList.toggle("active", mode === "login");
+  signupBtn.classList.toggle("active", mode === "signup");
+  $("signupFields").style.display = mode === "signup" ? "block" : "none";
+  $("signupFields2").style.display = mode === "signup" ? "block" : "none";
+  $("authTitle").textContent = mode === "login" ? "Log in" : "Create account";
+  $("lgo").textContent = mode === "login" ? "Log in" : "Create account";
+  $("lerr").textContent = "";
+}
+
 function showLogin() {
   S && (S.over = true); clearInterval(loop); $("end").style.display = "none";
-  $("lnote").textContent = "The leaderboard and crowd prices are shared with everyone online. Your PIN only protects your profile on this device.";
-  $("lpin").value = ""; $("lerr").textContent = ""; $("login").style.display = "grid";
-  try { $("lname").value = localStorage.getItem(DB_KEY + "_last") || ""; } catch (e) { }
-  ($("lname").value ? $("lpin") : $("lname")).focus();
+  setAuthMode("login");
+  if ($("aemail")) $("aemail").value = "";
+  if ($("apw")) $("apw").value = "";
+  if ($("apw2")) $("apw2").value = "";
+  if ($("aname")) $("aname").value = "";
+  $("lerr").textContent = "";
+  $("login").style.display = "grid";
+  setupAuthToggle();
+  ($("aemail") || $("lgo")).focus();
 }
-async function login() {
-  const name = $("lname").value.trim(), pin = $("lpin").value.trim(), err = t => ($("lerr").textContent = t);
-  if (name.length < 2) return err("Enter a name with at least 2 characters.");
-  if (!/^\d{4}$/.test(pin)) return err("The PIN must be exactly 4 digits.");
-  const db = loadDB(), key = name.toLowerCase(), ph = hashPin(key + ":" + pin);
-  if (db.users[key] && db.users[key].pin !== ph) return err("Wrong PIN for that name.");
-  if (!db.users[key]) db.users[key] = { name, pin: ph, best: null, games: 0, bestVisits: 0 };
-  saveDB(db); try { localStorage.setItem(DB_KEY + "_last", name); } catch (e) { }
-  PLAYER = key; $("who").textContent = db.users[key].name;
-  $("login").style.display = "none"; fetchLeaderboard(); init();
+
+function updateHeaderUser() {
+  const info = $("userInfo");
+  const btn = $("logoutBtn");
+  if (AUTH_USER) {
+    if (info) info.textContent = AUTH_USER.name;
+    if (btn) btn.style.display = "inline-block";
+  } else {
+    if (info) info.textContent = "";
+    if (btn) btn.style.display = "none";
+  }
 }
+
+function logout() {
+  AUTH_TOKEN = null;
+  AUTH_USER = null;
+  localStorage.removeItem("snu_token");
+  localStorage.removeItem("snu_user");
+  updateHeaderUser();
+  showLogin();
+}
+
+async function doAuth() {
+  const err = t => ($("lerr").textContent = t);
+  const emailVal = ($("aemail").value || "").trim().toLowerCase();
+  const pw = ($("apw").value || "");
+
+  if (!emailVal.endsWith("@snu.edu.in")) return err("Use your @snu.edu.in email.");
+  if (pw.length < 6) return err("Password must be at least 6 characters.");
+
+  if (authMode === "signup") {
+    const name = ($("aname").value || "").trim();
+    const pw2 = ($("apw2").value || "");
+    if (name.length < 2) return err("Enter a name with at least 2 characters.");
+    if (pw !== pw2) return err("Passwords don't match.");
+
+    if (apiOk()) {
+      try {
+        const res = await apiPost("/signup", { email: emailVal, name, password: pw });
+        AUTH_TOKEN = res.token;
+        AUTH_USER = { email: res.email, name: res.name };
+        localStorage.setItem("snu_token", AUTH_TOKEN);
+        localStorage.setItem("snu_user", JSON.stringify(AUTH_USER));
+      } catch (e) {
+        return err(e.body?.error || "Signup failed.");
+      }
+    } else {
+      // Offline fallback
+      AUTH_USER = { email: emailVal, name };
+      localStorage.setItem("snu_user", JSON.stringify(AUTH_USER));
+    }
+  } else {
+    // Login
+    if (apiOk()) {
+      try {
+        const res = await apiPost("/login", { email: emailVal, password: pw });
+        AUTH_TOKEN = res.token;
+        AUTH_USER = { email: res.email, name: res.name };
+        localStorage.setItem("snu_token", AUTH_TOKEN);
+        localStorage.setItem("snu_user", JSON.stringify(AUTH_USER));
+      } catch (e) {
+        return err(e.body?.error || "Wrong email or password.");
+      }
+    } else {
+      // Offline fallback: check localStorage
+      const existing = localStorage.getItem("snu_user");
+      if (existing) {
+        AUTH_USER = JSON.parse(existing);
+      } else {
+        AUTH_USER = { email: emailVal, name: emailVal.split("@")[0] };
+        localStorage.setItem("snu_user", JSON.stringify(AUTH_USER));
+      }
+    }
+  }
+
+  PLAYER = AUTH_USER.email;
+  $("who").textContent = AUTH_USER.name;
+  updateHeaderUser();
+  $("login").style.display = "none";
+  fetchLeaderboard();
+  init();
+}
+
 function saveScore(w) {
   if (apiOk()) {
-    const username = $("who").textContent.replace(/[^A-Za-z0-9 ]/g, "").trim().slice(0, 20) || "player";
-    apiPost("/score", { username, score: Math.round(w) })
+    apiPost("/score", { score: Math.round(w) })
       .then(() => { toast("🏆 Score saved!"); fetchLeaderboard(); })
       .catch(() => {});
   }
-  const db = loadDB(), u = db.users[PLAYER]; if (!u) return;
-  const first = u.best === null, better = first || w > u.best;
-  u.games++; if (better) u.best = w; u.bestVisits = Math.max(u.bestVisits || 0, S.seen.size);
+  const db = loadDB();
+  const first = db.best === null, better = first || w > db.best;
+  db.games = (db.games || 0) + 1; if (better) db.best = w;
   saveDB(db); renderLb();
-  $("endP").textContent += better ? (first ? " First score saved." : " New personal best!") : " Your best is " + inr(u.best) + ".";
+  $("endP").textContent += better ? (first ? " First score saved." : " New personal best!") : " Your best is " + inr(db.best) + ".";
 }
 
 /* ===== CONNECT TAB ===== */
@@ -533,11 +647,10 @@ $("saveProfile").onclick = async () => {
   const dept = $("profDept").value, batch = $("profBatch").value;
   const interests = [...document.querySelectorAll("#profInterests .tag-chip.active")].map(b => b.dataset.int);
   if (!dept || !batch) { toast("Pick department and batch!"); return; }
-  const username = ($("who").textContent || "anon").trim();
-  MY_PROFILE = { username, department: dept, batch, interests, avatarColor: "#D62FA8" };
+  MY_PROFILE = { username: currentEmail(), displayName: currentName(), department: dept, batch, interests, avatarColor: "#D62FA8" };
   localStorage.setItem("snu_profile", JSON.stringify(MY_PROFILE));
   if (apiOk()) {
-    apiPost("/profile", MY_PROFILE).then(() => toast("✅ Profile saved!")).catch(() => {});
+    apiPost("/profile", { department: dept, batch, interests, avatarColor: "#D62FA8" }).then(() => toast("✅ Profile saved!")).catch(() => {});
   } else { toast("✅ Profile saved (offline)"); }
   $("profileModal").style.display = "none";
   loadConnect();
@@ -567,10 +680,11 @@ async function fetchStudents() {
   }
   grid.innerHTML = students.map(s => {
     const shared = MY_PROFILE ? (s.interests || []).filter(i => MY_PROFILE.interests.includes(i)).length : 0;
+    const dispName = s.displayName || s.username || "?";
     return `<div class="student-card">
-      <div class="avatar" style="background:${s.avatarColor || "#D62FA8"}">${(s.username || "?")[0].toUpperCase()}</div>
+      <div class="avatar" style="background:${s.avatarColor || "#D62FA8"}">${(dispName)[0].toUpperCase()}</div>
       ${shared ? `<div class="s-badge">${shared} shared</div>` : ""}
-      <div class="s-name">${(s.username || "").replace(/[<>&]/g, "")}</div>
+      <div class="s-name">${dispName.replace(/[<>&]/g, "")}</div>
       <div class="s-dept">${s.department || ""} · ${s.batch || ""}</div>
       <div class="s-interests">${(s.interests || []).join(", ")}</div>
       <button class="wave-btn" onclick="sendWave('${s.username}')">👋 Wave</button>
@@ -583,9 +697,8 @@ $("filterBatch").onchange = fetchStudents;
 $("filterDiffDept").onchange = fetchStudents;
 
 window.sendWave = async function(toUser) {
-  const from = ($("who").textContent || "anon").trim();
   if (apiOk()) {
-    apiPost("/wave", { toUser, fromUser: from }).then(() => toast("👋 Waved at " + toUser + "!")).catch(() => toast("Wave failed."));
+    apiPost("/wave", { toUser }).then(() => toast("👋 Waved at " + toUser + "!")).catch(() => toast("Wave failed."));
   } else { toast("👋 Waved at " + toUser + " (offline)"); }
 };
 
@@ -596,11 +709,10 @@ function startWavePolling() {
 }
 
 async function fetchWaves() {
-  const user = ($("who").textContent || "").trim();
-  if (!user) return;
+  if (!currentEmail()) return;
   try {
     if (!apiOk()) throw "offline";
-    const data = await apiGet("/waves?user=" + user);
+    const data = await apiGet("/waves?user=" + currentEmail());
     const bell = $("waveBell");
     $("waveCount").textContent = data.length;
     bell.classList.toggle("has-waves", data.length > 0);
@@ -648,7 +760,8 @@ async function loadLostFound() {
   }
   let items = LF_ITEMS;
   if (place) items = items.filter(i => i.placeId === place);
-  if (type) items = items.filter(i => i.type === type);
+  if (type === "mine") items = items.filter(i => i.reportedBy === currentEmail());
+  else if (type) items = items.filter(i => i.type === type);
   renderLfGrid(items);
   updateLostBadges(items);
 }
@@ -659,18 +772,23 @@ function renderLfGrid(items) {
     grid.innerHTML = `<div class="empty-sticker">🎒 No items reported. Campus is tidy!</div>`;
     return;
   }
+  const myEmail = currentEmail();
   grid.innerHTML = items.map(it => {
     const ago = timeAgo(it.createdAt);
     const pName = P[it.placeId] ? P[it.placeId].name : it.placeId;
+    const isMine = it.reportedBy === myEmail;
+    const reporterDisplay = it.reporterName || it.reportedBy || "";
     return `<div class="lf-card">
       <div class="lf-tag ${it.type}">${it.type.toUpperCase()}</div>
+      ${isMine ? '<span class="lf-mine-tag">Mine</span>' : ''}
       <div class="lf-title">${(it.title || "").replace(/[<>&]/g, "")}</div>
       <div class="lf-desc">${(it.description || "").replace(/[<>&]/g, "")}</div>
       <div class="lf-place">📍 ${pName}</div>
-      <div class="lf-time">${ago} · by ${(it.reportedBy || "").replace(/[<>&]/g, "")}</div>
+      <div class="lf-time">${ago} · by ${reporterDisplay.replace(/[<>&]/g, "")}</div>
       <div class="lf-actions">
         <button class="btn-outline btn-sm" onclick="revealContact(this, '${(it.contact || "").replace(/'/g, "")}')">This is mine</button>
-        ${it.status === "open" ? `<button class="btn-sm" style="background:#b9f0d0;border:2px solid var(--ink)" onclick="resolveItem('${it.itemId}', this)">Mark returned</button>` : ""}
+        ${it.status === "open" && isMine ? `<button class="btn-sm" style="background:#b9f0d0;border:2px solid var(--ink)" onclick="resolveItem('${it.itemId}', this)">Mark returned</button>` : ""}
+        ${isMine ? `<button class="btn-sm" style="background:#ffd1d1;border:2px solid var(--ink)" onclick="deleteItem('${it.itemId}')">Delete</button>` : ""}
       </div>
       <div class="lf-contact-reveal"></div>
     </div>`;
@@ -693,11 +811,23 @@ window.revealContact = function(btn, contact) {
 
 window.resolveItem = async function(itemId, btn) {
   if (apiOk()) {
-    apiPost("/items/resolve", { itemId }).then(() => { toast("✅ Marked as returned!"); loadLostFound(); }).catch(() => toast("Failed."));
+    apiPost("/items/resolve", { itemId }).then(() => { toast("✅ Marked as returned!"); loadLostFound(); }).catch(e => toast(e.body?.error || "Failed."));
   } else {
     btn.textContent = "Returned ✓";
     btn.disabled = true;
     toast("✅ Marked as returned (offline)");
+  }
+};
+
+window.deleteItem = async function(itemId) {
+  if (!confirm("Delete this item?")) return;
+  if (apiOk()) {
+    apiPost("/items/delete", { itemId }).then(() => { toast("🗑️ Item deleted."); loadLostFound(); }).catch(e => toast(e.body?.error || "Failed."));
+  } else {
+    LF_ITEMS = LF_ITEMS.filter(i => i.itemId !== itemId);
+    renderLfGrid(LF_ITEMS);
+    updateLostBadges(LF_ITEMS);
+    toast("🗑️ Item deleted (offline)");
   }
 };
 
@@ -718,20 +848,19 @@ function updateLostBadges(items) {
   });
 }
 
-$("reportLost").onclick = () => { $("lfType").value = "lost"; $("lfModalTitle").textContent = "I lost something"; $("lfModal").style.display = "grid"; initLfDropdowns(); };
-$("reportFound").onclick = () => { $("lfType").value = "found"; $("lfModalTitle").textContent = "I found something"; $("lfModal").style.display = "grid"; initLfDropdowns(); };
+$("reportLost").onclick = () => { $("lfType").value = "lost"; $("lfModalTitle").textContent = "I lost something"; $("lfModal").style.display = "grid"; initLfDropdowns(); $("lfContact").value = currentEmail(); };
+$("reportFound").onclick = () => { $("lfType").value = "found"; $("lfModalTitle").textContent = "I found something"; $("lfModal").style.display = "grid"; initLfDropdowns(); $("lfContact").value = currentEmail(); };
 $("lfCancel").onclick = () => { $("lfModal").style.display = "none"; };
 
 $("lfSubmit").onclick = async () => {
   const title = $("lfTitle").value.trim(), desc = $("lfDesc").value.trim(), place = $("lfPlace").value, contact = $("lfContact").value.trim(), type = $("lfType").value;
   if (!title || !place || !contact) { toast("Fill in title, place, and contact!"); return; }
-  const user = ($("who").textContent || "anon").trim();
   if (apiOk()) {
-    apiPost("/items", { type, title, description: desc, placeId: place, reportedBy: user, contact })
+    apiPost("/items", { type, title, description: desc, placeId: place, contact })
       .then(() => { toast("✅ Report submitted!"); $("lfModal").style.display = "none"; loadLostFound(); })
       .catch(() => toast("Submission failed."));
   } else {
-    LF_ITEMS.unshift({ itemId: "local_" + Date.now(), type, title, description: desc, placeId: place, reportedBy: user, contact, status: "open", createdAt: Date.now() / 1000 });
+    LF_ITEMS.unshift({ itemId: "local_" + Date.now(), type, title, description: desc, placeId: place, reportedBy: currentName(), contact, status: "open", createdAt: Date.now() / 1000 });
     toast("✅ Report submitted (offline)");
     $("lfModal").style.display = "none";
     renderLfGrid(LF_ITEMS);
@@ -743,11 +872,23 @@ $("lfFilterPlace").onchange = loadLostFound;
 $("lfFilterType").onchange = loadLostFound;
 
 /* ===== BOOT ===== */
-$("lgo").onclick = login;
-$("lpin").addEventListener("keydown", e => { if (e.key === "Enter") login(); });
-$("lname").addEventListener("keydown", e => { if (e.key === "Enter") $("lpin").focus(); });
-$("switch").onclick = showLogin;
+$("lgo").onclick = doAuth;
+if ($("apw")) $("apw").addEventListener("keydown", e => { if (e.key === "Enter") doAuth(); });
+if ($("aemail")) $("aemail").addEventListener("keydown", e => { if (e.key === "Enter") $("apw").focus(); });
+if ($("logoutBtn")) $("logoutBtn").onclick = logout;
 $("restart").onclick = init; $("again").onclick = init;
-if ($("heroPlay")) $("heroPlay").onclick = () => { if (PLAYER) { document.querySelector("main").scrollIntoView({ behavior: "smooth" }); } else { showLogin(); } };
+if ($("heroPlay")) $("heroPlay").onclick = () => { if (AUTH_USER) { document.querySelector("main").scrollIntoView({ behavior: "smooth" }); } else { showLogin(); } };
 initRealCheckin();
-fetchLeaderboard(); showLogin();
+
+// Auto-login if token exists
+if (AUTH_TOKEN && AUTH_USER) {
+  PLAYER = AUTH_USER.email;
+  $("who").textContent = AUTH_USER.name;
+  updateHeaderUser();
+  $("login").style.display = "none";
+  fetchLeaderboard();
+  init();
+} else {
+  fetchLeaderboard();
+  showLogin();
+}

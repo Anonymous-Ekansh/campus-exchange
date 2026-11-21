@@ -50,7 +50,8 @@
     <div class="stat-sticker" id="stk-vis"><span>Check-ins</span><b id="visits"></b></div>
     <div class="stat-sticker" id="stk-who"><span>Player</span><b id="who"></b></div>
     <button class="btn-outline btn-sm" id="restart">Restart</button>
-    <button class="btn-outline btn-sm" id="switch">Switch player</button>
+    <span class="user-info" id="userInfo"></span>
+    <button class="btn-outline btn-sm" id="logoutBtn" style="display:none">Log out</button>
   </div>
 </section>
 
@@ -185,7 +186,7 @@
     </div>
     <div class="connect-filters">
       <select id="lfFilterPlace" aria-label="Filter by place"><option value="">All places</option></select>
-      <select id="lfFilterType" aria-label="Filter by type"><option value="">All</option><option value="lost">Lost</option><option value="found">Found</option></select>
+      <select id="lfFilterType" aria-label="Filter by type"><option value="">All</option><option value="lost">Lost</option><option value="found">Found</option><option value="mine">My items</option></select>
     </div>
     <div class="lf-grid" id="lfGrid">
       <div class="skeleton-line"></div><div class="skeleton-line short"></div><div class="skeleton-line"></div>
@@ -193,15 +194,24 @@
   </section>
 </div><!-- /tabLostfound -->
 
-<!-- ───── LOGIN MODAL ───── -->
+<!-- ───── AUTH MODAL ───── -->
 <div id="login"><div>
-  <h3>Who's playing?</h3>
-  <p>Pick a name and a 4-digit PIN. Your best score and rank are saved under them on this device.</p>
-  <input id="lname" placeholder="Your name" maxlength="20" autocomplete="off" aria-label="Name">
-  <input id="lpin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" autocomplete="off" aria-label="PIN">
+  <h3 id="authTitle">Log in</h3>
+  <div class="auth-toggle">
+    <button class="auth-mode active" id="authLoginBtn" data-mode="login">Log in</button>
+    <button class="auth-mode" id="authSignupBtn" data-mode="signup">Create account</button>
+  </div>
+  <div id="signupFields" style="display:none">
+    <input id="aname" placeholder="Your name" maxlength="30" autocomplete="name" aria-label="Name">
+  </div>
+  <input id="aemail" placeholder="you@snu.edu.in" maxlength="60" autocomplete="email" aria-label="Email" type="email">
+  <input id="apw" type="password" placeholder="Password (min 6 chars)" autocomplete="current-password" aria-label="Password">
+  <div id="signupFields2" style="display:none">
+    <input id="apw2" type="password" placeholder="Confirm password" autocomplete="new-password" aria-label="Confirm password">
+  </div>
   <div id="lerr"></div>
-  <button id="lgo" class="btn-mag btn-full">Start playing</button>
-  <p id="lnote" style="margin:12px 0 0;font-size:12px">Scores stay on this device and browser. This is not secure sign-in.</p>
+  <button id="lgo" class="btn-mag btn-full">Log in</button>
+  <p id="lnote" style="margin:12px 0 0;font-size:12px;color:var(--dim)">Hackathon build: accounts use an @snu.edu.in email and a password. Next step: verify emails with a code using Amazon Cognito.</p>
 </div></div>
 
 <!-- ───── END MODAL ───── -->

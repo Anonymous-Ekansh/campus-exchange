@@ -1,9 +1,10 @@
 """
 SNU Campus Exchange – single Lambda handler for HTTP API Gateway.
 Region: ap-south-1 | Runtime: Python 3.12
-Tables: Players, Checkins, Profiles, Memberships, Waves, Items, Ratings
+Tables: Players, Checkins, Profiles, Memberships, Waves, Items, Ratings, Users
+Auth: PBKDF2 password hashing, HMAC-SHA256 signed tokens (7-day expiry)
 """
-import boto3, json, time, uuid
+import boto3, json, time, uuid, hashlib, hmac, os, base64
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key, Attr
 
@@ -15,13 +16,65 @@ memberships = ddb.Table("Memberships")
 waves       = ddb.Table("Waves")
 items       = ddb.Table("Items")
 ratings     = ddb.Table("Ratings")
+users       = ddb.Table("Users")
+
+AUTH_SECRET = os.environ.get("AUTH_SECRET", "dev-secret-change-me")
+TOKEN_EXPIRY = 7 * 24 * 3600  # 7 days
 
 HEADERS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "*",
     "Content-Type": "application/json",
 }
+
+# ---------- AUTH HELPERS ----------
+def hash_password(password, salt=None):
+    if salt is None:
+        salt = os.urandom(16)
+    else:
+        salt = base64.b64decode(salt)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000)
+    return base64.b64encode(salt).decode(), base64.b64encode(dk).decode()
+
+def verify_password(password, stored_salt, stored_hash):
+    _, computed = hash_password(password, stored_salt)
+    return hmac.compare_digest(computed, stored_hash)
+
+def make_token(email, name):
+    exp = int(time.time()) + TOKEN_EXPIRY
+    payload = f"{email}|{name}|{exp}"
+    sig = hmac.new(AUTH_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    token = base64.b64encode(f"{payload}|{sig}".encode()).decode()
+    return token
+
+def verify_token(token):
+    """Returns (email, name) or None."""
+    try:
+        decoded = base64.b64decode(token).decode()
+        parts = decoded.rsplit("|", 1)
+        if len(parts) != 2:
+            return None
+        payload, sig = parts
+        expected = hmac.new(AUTH_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return None
+        segs = payload.split("|")
+        if len(segs) != 3:
+            return None
+        email, name, exp = segs
+        if int(exp) < int(time.time()):
+            return None
+        return email, name
+    except Exception:
+        return None
+
+def get_user(event):
+    """Extract email from Authorization: Bearer <token>. Returns (email, name) or None."""
+    auth = (event.get("headers") or {}).get("authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    return verify_token(auth[7:])
 
 class DecEncoder(json.JSONEncoder):
     def default(self, o):
@@ -32,12 +85,60 @@ class DecEncoder(json.JSONEncoder):
 def resp(code, body):
     return {"statusCode": code, "headers": HEADERS, "body": json.dumps(body, cls=DecEncoder)}
 
+# Routes that do NOT require auth
+PUBLIC_ROUTES = {"POST /signup", "POST /login", "GET /leaderboard", "GET /crowd"}
+
 def handler(event, context):
     try:
         route = event.get("routeKey", "")
         body  = json.loads(event.get("body") or "{}")
         qs    = event.get("queryStringParameters") or {}
         now   = int(time.time())
+
+        # --- Auth middleware ---
+        email = None
+        uname = None
+        if route not in PUBLIC_ROUTES:
+            user_info = get_user(event)
+            if not user_info:
+                return resp(401, {"error": "Not authenticated. Please log in."})
+            email, uname = user_info
+
+        # ========== SIGNUP ==========
+        if route == "POST /signup":
+            em = (body.get("email") or "").strip().lower()
+            nm = (body.get("name") or "").strip()
+            pw = body.get("password", "")
+            if not em.endswith("@snu.edu.in"):
+                return resp(400, {"error": "Use your @snu.edu.in email."})
+            if len(pw) < 6:
+                return resp(400, {"error": "Password must be at least 6 characters."})
+            if len(nm) < 2:
+                return resp(400, {"error": "Name must be at least 2 characters."})
+            existing = users.get_item(Key={"email": em}).get("Item")
+            if existing:
+                return resp(409, {"error": "Account already exists."})
+            salt, pw_hash = hash_password(pw)
+            users.put_item(Item={
+                "email": em, "name": nm, "salt": salt, "pwHash": pw_hash, "createdAt": now,
+            })
+            token = make_token(em, nm)
+            return resp(200, {"token": token, "email": em, "name": nm})
+
+        # ========== LOGIN ==========
+        if route == "POST /login":
+            em = (body.get("email") or "").strip().lower()
+            pw = body.get("password", "")
+            if not em.endswith("@snu.edu.in"):
+                return resp(400, {"error": "Use your @snu.edu.in email."})
+            u = users.get_item(Key={"email": em}).get("Item")
+            if not u:
+                return resp(401, {"error": "Wrong email or password."})
+            if not verify_password(pw, u["salt"], u["pwHash"]):
+                return resp(401, {"error": "Wrong email or password."})
+            nm = u.get("name", em.split("@")[0])
+            token = make_token(em, nm)
+            return resp(200, {"token": token, "email": em, "name": nm})
 
         # ---------- LEADERBOARD ----------
         if route == "GET /leaderboard":
@@ -48,24 +149,22 @@ def handler(event, context):
 
         # ---------- SCORE ----------
         if route == "POST /score":
-            username = body["username"]
-            score    = Decimal(str(body["score"]))
-            cur = players.get_item(Key={"username": username}).get("Item")
+            score = Decimal(str(body["score"]))
+            cur = players.get_item(Key={"username": email}).get("Item")
             if not cur or score > cur.get("bestScore", Decimal("0")):
-                players.put_item(Item={"username": username, "bestScore": score})
+                players.put_item(Item={"username": email, "bestScore": score, "displayName": uname})
                 return resp(200, {"updated": True, "bestScore": score})
             return resp(200, {"updated": False, "bestScore": cur["bestScore"]})
 
         # ---------- CHECKIN ----------
         if route == "POST /checkin":
             real = body.get("real", False)
-            # Real check-ins count double in crowd
             count = 2 if real else 1
             for _ in range(count):
                 checkins.put_item(Item={
                     "placeId":   body["placeId"],
-                    "timestamp": now + _ ,  # offset by 1s to avoid overwrite
-                    "username":  body["username"],
+                    "timestamp": now + _,
+                    "username":  email,
                     "ttl":       now + 7200,
                     "real":      real,
                 })
@@ -88,13 +187,14 @@ def handler(event, context):
             its = checkins.query(
                 KeyConditionExpression=Key("placeId").eq(place) & Key("timestamp").gte(cutoff)
             ).get("Items", [])
-            users = list({i["username"] for i in its})
-            return resp(200, {"users": users})
+            user_list = list({i["username"] for i in its})
+            return resp(200, {"users": user_list})
 
         # ---------- PROFILE ----------
         if route == "POST /profile":
             profiles.put_item(Item={
-                "username":    body["username"],
+                "username":    email,
+                "displayName": uname,
                 "department":  body.get("department", ""),
                 "batch":       body.get("batch", ""),
                 "interests":   body.get("interests", []),
@@ -125,7 +225,7 @@ def handler(event, context):
         if route == "POST /join":
             memberships.put_item(Item={
                 "community": body["community"],
-                "username":  body["username"],
+                "username":  email,
             })
             return resp(200, {"success": True})
 
@@ -133,7 +233,7 @@ def handler(event, context):
         if route == "POST /leave":
             memberships.delete_item(Key={
                 "community": body["community"],
-                "username":  body["username"],
+                "username":  email,
             })
             return resp(200, {"success": True})
 
@@ -151,15 +251,14 @@ def handler(event, context):
             waves.put_item(Item={
                 "toUser":    body["toUser"],
                 "timestamp": now,
-                "fromUser":  body["fromUser"],
+                "fromUser":  email,
             })
             return resp(200, {"success": True})
 
         # ---------- WAVES ----------
         if route == "GET /waves":
-            user = qs.get("user", "")
             its = waves.query(
-                KeyConditionExpression=Key("toUser").eq(user),
+                KeyConditionExpression=Key("toUser").eq(email),
                 ScanIndexForward=False,
                 Limit=20,
             ).get("Items", [])
@@ -175,8 +274,9 @@ def handler(event, context):
                 "title":       body.get("title", ""),
                 "description": body.get("description", ""),
                 "placeId":     body.get("placeId", ""),
-                "reportedBy":  body.get("reportedBy", ""),
-                "contact":     body.get("contact", ""),
+                "reportedBy":  email,
+                "reporterName": uname,
+                "contact":     body.get("contact", email),
                 "status":      "open",
                 "createdAt":   now,
             })
@@ -194,6 +294,9 @@ def handler(event, context):
             if qs.get("type"):
                 fe_parts.append("#tp = :tp")
                 eav[":tp"] = qs["type"]
+            if qs.get("mine") and email:
+                fe_parts.append("reportedBy = :me")
+                eav[":me"] = email
             kwargs = {}
             ean = {}
             if any(k in [s for s in qs] for k in ["status"]):
@@ -212,16 +315,28 @@ def handler(event, context):
         # ---------- RESOLVE ITEM ----------
         if route == "POST /items/resolve":
             item_id = body.get("itemId", "")
-            # Find the item and update its status
             its = items.scan(FilterExpression=Attr("itemId").eq(item_id)).get("Items", [])
             if its:
                 it = its[0]
+                if it.get("reportedBy") != email:
+                    return resp(403, {"error": "Only the reporter can resolve this item."})
                 items.update_item(
                     Key={"itemId": item_id},
                     UpdateExpression="SET #st = :s",
                     ExpressionAttributeNames={"#st": "status"},
                     ExpressionAttributeValues={":s": "returned"},
                 )
+            return resp(200, {"success": True})
+
+        # ---------- DELETE ITEM ----------
+        if route == "POST /items/delete":
+            item_id = body.get("itemId", "")
+            its = items.scan(FilterExpression=Attr("itemId").eq(item_id)).get("Items", [])
+            if its:
+                it = its[0]
+                if it.get("reportedBy") != email:
+                    return resp(403, {"error": "Only the reporter can delete this item."})
+                items.delete_item(Key={"itemId": item_id})
             return resp(200, {"success": True})
 
         # ---------- POST RATING ----------
@@ -231,7 +346,7 @@ def handler(event, context):
                 "timestamp": now,
                 "stars":     Decimal(str(body.get("stars", 3))),
                 "tag":       body.get("tag", ""),
-                "username":  body.get("username", "anon"),
+                "username":  email,
             })
             return resp(200, {"success": True})
 
