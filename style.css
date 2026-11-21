@@ -264,9 +264,98 @@ header {
 main {
   display: grid;
   grid-template-columns: 1fr 360px;
+  grid-template-areas:
+    "map   side"
+    "guide side";
   gap: 20px;
   padding: 16px 28px 20px;
   align-items: start;
+}
+.mapwrap { grid-area: map; }
+.guide-card { grid-area: guide; }
+.side { grid-area: side; }
+
+/* ============================================================
+   GAME GUIDE CARD (Below map on desktop, bottom on mobile)
+   ============================================================ */
+.guide-card {
+  box-shadow: 5px 5px 0 var(--ink);
+  background: var(--card);
+}
+.guide-card h2 {
+  font: 700 20px var(--serif);
+  margin: 0;
+  color: var(--ink);
+}
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.guide-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg);
+  border: 2px solid var(--ink);
+  align-items: flex-start;
+}
+.guide-num {
+  width: 22px;
+  height: 22px;
+  background: var(--mag);
+  color: #fff;
+  font: 700 11px var(--mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--ink);
+}
+.guide-content b {
+  display: block;
+  font: 700 12px var(--serif);
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+.guide-content p {
+  font: 400 10.5px var(--mono);
+  color: var(--dim);
+  line-height: 1.4;
+  margin: 0;
+}
+.guide-more {
+  background: #fff;
+  border: 2px solid var(--ink);
+  padding: 12px;
+  position: relative;
+}
+.guide-more-tag {
+  font: 700 9px var(--mono);
+  color: #fff;
+  background: var(--ink);
+  padding: 2px 7px;
+  display: inline-block;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+.guide-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.guide-feat b {
+  display: block;
+  font: 700 12px var(--serif);
+  color: var(--mag);
+  margin-bottom: 2px;
+}
+.guide-feat span {
+  display: block;
+  font: 400 10.5px var(--mono);
+  color: var(--dim);
+  line-height: 1.35;
 }
 
 /* ============================================================
@@ -957,8 +1046,14 @@ button:disabled { opacity: .45; cursor: default; }
   .ink-rule { margin: 0 16px; }
   .hero-strip { padding: 20px 16px 14px; flex-direction: column; align-items: flex-start; }
   .hero-right { width: 100%; }
-  main { grid-template-columns: 1fr; padding: 10px 16px 16px; }
-  .side { position: static; }
+  main {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 16px 16px;
+  }
+  .mapwrap { order: 1; width: 100%; }
+  .side { order: 2; width: 100%; position: static; }
+  .guide-card { order: 3; width: 100%; margin-top: 14px; }
   .stat-sticker { padding: 6px 10px; }
   .stat-sticker b { font-size: 14px; }
   .hero-headline { font-size: 26px; }
@@ -972,8 +1067,14 @@ button:disabled { opacity: .45; cursor: default; }
 
 @media (min-width: 701px) and (max-width: 900px) {
   header { flex-wrap: wrap; padding: 12px 20px; gap: 8px; }
-  main { grid-template-columns: 1fr; padding: 10px 20px 16px; }
-  .side { position: static; }
+  main {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 20px 16px;
+  }
+  .mapwrap { order: 1; width: 100%; }
+  .side { order: 2; width: 100%; position: static; }
+  .guide-card { order: 3; width: 100%; margin-top: 14px; }
 }
 
 /* ============================================================
