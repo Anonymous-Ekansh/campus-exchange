@@ -100,53 +100,8 @@ PUBLIC_PATHS = {
     ("GET", "/crowd"),
 }
 
-def handler(event, context):
-    try:
-        # --- Derive method + path from the event ---
-        http_ctx = (event.get("requestContext") or {}).get("http") or {}
-        method = http_ctx.get("method", event.get("httpMethod", "GET")).upper()
-        path   = event.get("rawPath", event.get("path", "/"))
-
-        # --- Handle OPTIONS (CORS preflight) ---
-        if method == "OPTIONS":
-            return resp(200, {"ok": True})
-
-        body = json.loads(event.get("body") or "{}")
-        qs   = event.get("queryStringParameters") or {}
-        now  = int(time.time())
-
-        # --- Auth middleware ---
-        email = None
-        uname = None
-        if (method, path) not in PUBLIC_PATHS:
-            user_info = get_user(event)
-            if not user_info:
-                return resp(401, {"error": "Not authenticated. Please log in."})
-            email, uname = user_info
-
-        # ========== SIGNUP ==========
-        if method == "POST" and path == "/signup":
-            em = (body.get("email") or "").strip().lower()
-            nm = (body.get("name") or "").strip()
-            pw = body.get("password", "")
-            if not em.endswith("@snu.edu.in"):
-                return resp(400, {"error": "Use your @snu.edu.in email."})
-            if len(pw) < 6:
-                return resp(400, {"error": "Password must be at least 6 characters."})
-            if len(nm) < 2:
-                return resp(400, {"error": "Name must be at least 2 characters."})
-            existing = users.get_item(Key={"email": em}).get("Item")
-            if existing:
-                return resp(409, {"error": "Account already exists."})
-            salt, pw_hash = hash_password(pw)
-            users.put_item(Item={
-                "email": em, "name": nm, "salt": salt, "pwHash": pw_hash, "createdAt": now,
-            })
-            token = make_token(em, nm)
-            return resp(200, {"token": token, "email": em, "name": nm})
-
-        # ========== LOGIN ==========
-        if method == "POST" and path == "/login":
+API=https://jib2dq7ra8.execute-api.ap-southeast-2.amazonaws.com
+curl -X POST $API/signup -H "Content-Type: application/json" -d '{"email":"test@snu.edu.in","name":"Test","password":"test123"}'gin":
             em = (body.get("email") or "").strip().lower()
             pw = body.get("password", "")
             if not em.endswith("@snu.edu.in"):

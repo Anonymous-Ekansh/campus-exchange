@@ -1,6 +1,6 @@
 /* ===== API ===== */
-const API_URL = "PASTE_URL_HERE";   // ← paste your HTTP API invoke URL here
-const S3_BASE  = "PASTE_S3_URL_HERE"; // ← e.g. https://snu-campus-exchange-uploads.s3.ap-southeast-2.amazonaws.com
+const API_URL = "https://jib2dq7ra8.execute-api.ap-southeast-2.amazonaws.com";
+const S3_BASE  = "https://snu-campus-exchange-uploads-ekansh.s3.ap-southeast-2.amazonaws.com";
 const apiOk = () => API_URL && API_URL !== "PASTE_URL_HERE";
 
 /* ===== EDIT ME ===== */

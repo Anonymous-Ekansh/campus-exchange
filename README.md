@@ -41,7 +41,7 @@
 
 ## Live URL
 
-🔗 _Coming soon_
+🔗 [https://main.d38e70fyvfmg2o.amplifyapp.com](https://main.d38e70fyvfmg2o.amplifyapp.com/)
 
 ## Local Development
 
