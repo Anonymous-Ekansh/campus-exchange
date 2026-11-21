@@ -1,0 +1,26 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Archives
+*.zip
+*.tar.gz
+
+# Dependencies
+node_modules/
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+*secret*
+*credentials*
+
+# IDE
+.vscode/
+.idea/
+
+# Amplify
+amplify/
+aws-exports.js
