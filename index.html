@@ -49,7 +49,6 @@
     <div class="stat-sticker" id="stk-net"><span>Net worth</span><b id="net"></b></div>
     <div class="stat-sticker" id="stk-vis"><span>Check-ins</span><b id="visits"></b></div>
     <div class="stat-sticker" id="stk-who"><span>Player</span><b id="who"></b></div>
-    <button class="btn-outline btn-sm" id="restart">Restart</button>
     <span class="user-info" id="userInfo"></span>
     <button class="btn-outline btn-sm" id="logoutBtn" style="display:none">Log out</button>
   </div>
@@ -59,11 +58,11 @@
 <div class="card how-card" id="howCard" style="display:none">
   <button class="how-dismiss" id="howDismiss" aria-label="Dismiss">✕</button>
   <div class="card-label">HOW IT WORKS</div>
-  <h2>3 steps to play</h2>
+  <h2>How to play</h2>
   <div class="how-steps">
-    <div class="how-step"><span class="how-num">1</span><b>Check in</b><br>Walk to a building on the map to check in and earn ₹100.</div>
-    <div class="how-step"><span class="how-num">2</span><b>Move the market</b><br>Buy and sell shares of campus places. Prices rise with demand.</div>
-    <div class="how-step"><span class="how-num">3</span><b>See who's there</b><br>Real student check-ins move prices. Watch the crowd and trade smart.</div>
+    <div class="how-step"><span class="how-num">1</span><b>Check in</b><br>Check in for real to earn ₹100 per place a day.</div>
+    <div class="how-step"><span class="how-num">2</span><b>Trade places</b><br>Buy and sell shares of campus places from anywhere on the map.</div>
+    <div class="how-step"><span class="how-num">3</span><b>Live market</b><br>Prices follow the time of day and campus news. The day resets at midnight IST.</div>
   </div>
 </div>
 
@@ -213,9 +212,6 @@
   <button id="lgo" class="btn-mag btn-full">Log in</button>
   <p id="lnote" style="margin:12px 0 0;font-size:12px;color:var(--dim)">Hackathon build: accounts use an @snu.edu.in email and a password. Next step: verify emails with a code using Amazon Cognito.</p>
 </div></div>
-
-<!-- ───── END MODAL ───── -->
-<div id="end"><div><h3 id="endT"></h3><p id="endP"></p><div id="endLb" class="lb"></div><button id="again" class="btn-mag btn-full">Play again</button></div></div>
 
 <!-- ───── PROFILE MODAL ───── -->
 <div id="profileModal" class="modal-overlay" style="display:none"><div class="modal-box">

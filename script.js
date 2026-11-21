@@ -3,20 +3,20 @@ const API_URL = "https://jib2dq7ra8.execute-api.ap-southeast-2.amazonaws.com";
 const S3_BASE  = "https://snu-campus-exchange-uploads-ekansh.s3.ap-southeast-2.amazonaws.com";
 const apiOk = () => API_URL && API_URL !== "PASTE_URL_HERE";
 
-/* ===== EDIT ME ===== */
-const GAME_SEC = 240, START_CASH = 10000, SPEED = 140;
+/* ===== SHARED CONFIG ===== */
 const CATS = {
-  land: { c: "#8b8fa3", b: 40, pk: [9, 16], n: "Landmark", t: "Everyone passes through. Steady and never wild." },
-  acad: { c: "#3a56e8", b: 90, pk: [10.5, 15], n: "Academics", t: "Busy during lectures, quiet after 5 PM." },
-  lib: { c: "#1f2a6b", b: 110, pk: [19, 22.5], n: "Library", t: "Fills up in the evening, brutal before exams." },
-  ess: { c: "#f5c518", b: 55, pk: [18, 23.5], n: "Essentials", t: "Evening rush, and midnight Maggi runs." },
-  food: { c: "#ff9f1c", b: 35, pk: [13.5, 17, 21], n: "Food", t: "Queue length is the demand signal." },
-  dine: { c: "#ff6b3d", b: 45, pk: [8.5, 13.5, 20], n: "Dining hall", t: "Meal times only. Buy before the rush, sell in it." },
-  host: { c: "#ff5fb8", b: 70, pk: [23], n: "Hostel", t: "Calm in the day, wild at night." },
-  health: { c: "#e5484d", b: 60, pk: [12, 17], n: "Healthcare", t: "Spikes in exam and fest weeks." },
-  sport: { c: "#19b36a", b: 65, pk: [17.5, 19], n: "Sports", t: "Evening is game time." },
-  green: { c: "#2f8f5b", b: 50, pk: [17.5], n: "Green place", t: "Peaceful. Sunset is the peak." },
+  land:   { c: "#8b8fa3", b: 40,  pk: [9, 16],        n: "Landmark",    t: "Everyone passes through. Steady and never wild." },
+  acad:   { c: "#3a56e8", b: 90,  pk: [10.5, 15],     n: "Academics",   t: "Busy during lectures, quiet after 5 PM." },
+  lib:    { c: "#1f2a6b", b: 110, pk: [19, 22.5],     n: "Library",     t: "Fills up in the evening, brutal before exams." },
+  ess:    { c: "#f5c518", b: 55,  pk: [18, 23.5],     n: "Essentials",  t: "Evening rush, and midnight Maggi runs." },
+  food:   { c: "#ff9f1c", b: 35,  pk: [13.5, 17, 21], n: "Food",        t: "Queue length is the demand signal." },
+  dine:   { c: "#ff6b3d", b: 45,  pk: [8.5, 13.5, 20],n: "Dining hall", t: "Meal times only. Buy before the rush, sell in it." },
+  host:   { c: "#ff5fb8", b: 70,  pk: [23],           n: "Hostel",      t: "Calm in the day, wild at night." },
+  health: { c: "#e5484d", b: 60,  pk: [12, 17],       n: "Healthcare",  t: "Spikes in exam and fest weeks." },
+  sport:  { c: "#19b36a", b: 65,  pk: [17.5, 19],     n: "Sports",      t: "Evening is game time." },
+  green:  { c: "#2f8f5b", b: 50,  pk: [17.5],         n: "Green place", t: "Peaceful. Sunset is the peak." },
 };
+
 const PLACES = [
   ["gate", "Gate 1", "land", 500, 585], ["vista", "Central Vista", "land", 500, 495], ["uac", "UAC", "land", 640, 470],
   ["a", "A Block", "acad", 390, 400], ["b", "B Block", "acad", 460, 380], ["c", "C Block", "acad", 540, 380], ["d", "D Block", "acad", 610, 400],
@@ -31,6 +31,7 @@ const PLACES = [
   ["foot", "Football Ground", "sport", 850, 450], ["crick", "Cricket Ground", "sport", 880, 545], ["isc", "ISC", "sport", 750, 525], ["gym", "Gym", "sport", 650, 555],
   ["lake", "Lake SNU", "green", 610, 150], ["bio", "SNU Biodiversity Park", "green", 790, 95],
 ];
+
 const EVENTS = [
   ["Surprise quiz tomorrow. Everyone is heading to the library", { lib: .22, "@acad": .08, nes: .12 }],
   ["Fest night at the Amphitheatre", { amph: .30, "@food": .10, "@host": -.05 }],
@@ -49,36 +50,54 @@ const EVENTS = [
 /* =================== */
 const $ = id => document.getElementById(id), NS = "http://www.w3.org/2000/svg";
 const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
-const randn = () => (Math.random() + Math.random() + Math.random() - 1.5) * 1.6;
-const P = Object.fromEntries(PLACES.map(([id, name, cat, x, y], i) => [id, { id, name, cat, x, y, base: CATS[cat].b * (0.85 + ((i * 37) % 30) / 100), pr: 0, pend: 0 }]));
+const P = Object.fromEntries(PLACES.map(([id, name, cat, x, y], i) => [id, { id, name, cat, x, y, base: CATS[cat].b * (0.85 + ((i * 37) % 30) / 100) }]));
 const SIZE = { host: [46, 30], acad: [54, 34], lib: [60, 36] };
-let S, loop, acc, toastT;
 
-/* ===== Crowd data from API ===== */
-let CROWD_DATA = {};
-let crowdTimer = null;
-
-const hour = () => 8 + S.t * 16 / GAME_SEC;
-const fmtH = h => String(Math.floor(h)).padStart(2, "0") + ":" + String(Math.floor((h % 1) * 60)).padStart(2, "0");
-const demand = (cat, h) => Math.min(1.2, CATS[cat].pk.reduce((a, p) => a + Math.exp(-((h - p) ** 2) / (2 * 1.4 * 1.4)), 0));
-const target = p => p.base * (0.6 + demand(p.cat, hour())) * (1 + .45 * Math.tanh(p.pr / 12)) * (1 + 0.05 * (CROWD_DATA[p.id] || 0));
-const worth = () => S.cash + Object.keys(S.hold).reduce((a, k) => a + S.hold[k].q * P[k].p, 0);
-const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-
-const SKY = [[8, "#ffd29a", .22], [11, "#ffffff", 0], [15, "#ffffff", 0], [17.5, "#ff9a4d", .24], [20, "#4b4aa0", .26], [24, "#2a2f6e", .34]];
-function tint(h) {
-  let i = 0; while (i < SKY.length - 2 && h > SKY[i + 1][0]) i++;
-  const a = SKY[i], b = SKY[i + 1], k = Math.max(0, Math.min(1, (h - a[0]) / (b[0] - a[0])));
-  $("tint").setAttribute("fill", k < .5 ? a[1] : b[1]); $("tint").setAttribute("opacity", a[2] + (b[2] - a[2]) * k);
-}
-
-/* ===== AUTH STATE ===== */
+/* ===== SERVER-AUTHORITATIVE STATE ===== */
 let AUTH_TOKEN = localStorage.getItem("snu_token");
 let AUTH_USER = JSON.parse(localStorage.getItem("snu_user") || "null"); // {email, name}
 const currentEmail = () => AUTH_USER ? AUTH_USER.email : "";
 const currentName = () => AUTH_USER ? AUTH_USER.name : "";
 
-/* ===== API helpers ===== */
+let SERVER_PRICES = {};    // { placeId: { price, prevHourPrice } }
+let SERVER_PORTFOLIO = { cash: 10000, holdings: {}, bonusPlaces: [], netWorth: 10000, dayKey: "" };
+let CROWD_DATA = {};
+let SELECTED_PLACE = "lib";
+let CURRENT_NEWS = "";
+let REMOTE_LB = null;
+let toastT = null;
+
+let POLL_TIMER = null;
+let CLOCK_TIMER = null;
+let WAVE_TIMER = null;
+
+/* ===== SKY TINT (IST) ===== */
+const SKY = [[8, "#ffd29a", .22], [11, "#ffffff", 0], [15, "#ffffff", 0], [17.5, "#ff9a4d", .24], [20, "#4b4aa0", .26], [24, "#2a2f6e", .34]];
+function tint(h) {
+  let i = 0; while (i < SKY.length - 2 && h > SKY[i + 1][0]) i++;
+  const a = SKY[i], b = SKY[i + 1], k = Math.max(0, Math.min(1, (h - a[0]) / (b[0] - a[0])));
+  const el = $("tint");
+  if (el) {
+    el.setAttribute("fill", k < .5 ? a[1] : b[1]);
+    el.setAttribute("opacity", a[2] + (b[2] - a[2]) * k);
+  }
+}
+
+/* ===== REAL IST CLOCK ===== */
+function updateClock() {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const ist = new Date(utc + (5.5 * 3600000));
+  const h = ist.getHours();
+  const m = ist.getMinutes();
+  const decHour = h + m / 60.0;
+  const timeStr = String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+  const el = $("clock");
+  if (el) el.textContent = timeStr + " IST";
+  tint(decHour);
+}
+
+/* ===== API HELPERS ===== */
 async function apiGet(path) {
   const headers = {};
   if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
@@ -87,6 +106,7 @@ async function apiGet(path) {
   if (!r.ok) throw new Error(r.status);
   return r.json();
 }
+
 async function apiPost(path, body) {
   const headers = { "Content-Type": "application/json" };
   if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
@@ -119,11 +139,13 @@ document.querySelectorAll(".nav-tab, .bottom-tab").forEach(el => {
   el.addEventListener("click", e => { e.preventDefault(); switchTab(el.dataset.tab); });
 });
 
-/* ===== TICKER ===== */
+/* ===== TICKER STRIP ===== */
 function buildTicker() {
-  if (!S) return;
   let items = PLACES.map(([id, name]) => {
-    const p = P[id], c = ((p.p / p.open - 1) * 100);
+    const sp = SERVER_PRICES[id];
+    const cur = sp ? sp.price : P[id].base;
+    const prev = sp ? sp.prevHourPrice : cur;
+    const c = prev > 0 ? ((cur / prev - 1) * 100) : 0;
     const arrow = c >= 0 ? "▲" : "▼";
     const cls = c >= 0 ? "up" : "down";
     let extra = "";
@@ -133,10 +155,10 @@ function buildTicker() {
     return `${name} <span class="${cls}">${arrow} ${c >= 0 ? "+" : ""}${c.toFixed(0)}%</span>${extra}`;
   });
   const el = $("ticker");
+  if (!el) return;
   el.innerHTML = items.join(" · ") + " · " + items.join(" · ");
-  // Scale duration to ~40px/s so speed stays consistent regardless of content length
   requestAnimationFrame(() => {
-    const w = el.scrollWidth / 2; // half because content is duplicated
+    const w = el.scrollWidth / 2;
     el.style.animationDuration = Math.max(20, w / 40) + "s";
   });
 }
@@ -151,19 +173,7 @@ if ($("howBtn")) $("howBtn").onclick = () => {
   $("howCard").style.display = $("howCard").style.display === "none" ? "block" : "none";
 };
 
-/* ===== Crowd polling (every 20s) ===== */
-async function fetchCrowd() {
-  try {
-    CROWD_DATA = await apiGet("/crowd");
-    renderCrowdPanel();
-    updateBusyRings();
-    buildTicker();
-  } catch (e) {
-    renderCrowdPanel();
-    buildTicker();
-  }
-}
-
+/* ===== CROWD PANEL & BUSY RINGS ===== */
 function renderCrowdPanel() {
   const panel = $("crowdPanel");
   if (!panel) return;
@@ -208,69 +218,107 @@ function updateBusyRings() {
   });
 }
 
-function startCrowdPolling() {
-  if (crowdTimer) clearInterval(crowdTimer);
-  fetchCrowd();
-  crowdTimer = setInterval(fetchCrowd, 20000);
+/* ===== SERVER POLLING (Single combined interval: 20s) ===== */
+async function pollMarket() {
+  if (!apiOk() || !AUTH_TOKEN) return;
+  try {
+    const [pricesRes, crowdRes, portRes] = await Promise.all([
+      apiGet("/prices"),
+      apiGet("/crowd"),
+      apiGet("/portfolio")
+    ]);
+    if (pricesRes) {
+      SERVER_PRICES = pricesRes.prices || {};
+      if (pricesRes.news && pricesRes.news !== CURRENT_NEWS) {
+        CURRENT_NEWS = pricesRes.news;
+        news(CURRENT_NEWS);
+      }
+    }
+    if (crowdRes) {
+      CROWD_DATA = crowdRes;
+      renderCrowdPanel();
+      updateBusyRings();
+    }
+    if (portRes) {
+      SERVER_PORTFOLIO = portRes;
+    }
+    render();
+    buildTicker();
+  } catch (e) {
+    console.warn("Market polling error:", e);
+  }
 }
 
-/* ===== REAL CHECK-IN (separate from game) ===== */
-const REAL_CHECKIN_COOLDOWN = {};
+function startPolling() {
+  stopPolling();
+  updateClock();
+  CLOCK_TIMER = setInterval(updateClock, 30000);
+  pollMarket();
+  POLL_TIMER = setInterval(pollMarket, 20000);
+  fetchLeaderboard();
+}
+
+function stopPolling() {
+  if (POLL_TIMER) { clearInterval(POLL_TIMER); POLL_TIMER = null; }
+  if (CLOCK_TIMER) { clearInterval(CLOCK_TIMER); CLOCK_TIMER = null; }
+  if (WAVE_TIMER) { clearInterval(WAVE_TIMER); WAVE_TIMER = null; }
+}
+
+/* ===== REAL CHECK-IN ("I'm here right now") ===== */
 function initRealCheckin() {
   const sel = $("realPlace");
-  PLACES.forEach(([id, name]) => { const o = document.createElement("option"); o.value = id; o.textContent = name; sel.appendChild(o); });
-  $("realCheckinBtn").onclick = () => {
+  PLACES.forEach(([id, name]) => {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = name;
+    sel.appendChild(o);
+  });
+  $("realCheckinBtn").onclick = async () => {
     const pid = sel.value;
     if (!pid) { toast("Pick a place first!"); return; }
-    const user = currentEmail() || "anon";
-    const key = pid + "_" + user;
-    const now = Date.now();
-    if (REAL_CHECKIN_COOLDOWN[key] && now - REAL_CHECKIN_COOLDOWN[key] < 600000) {
-      toast("You already checked in here. Wait 10 min."); return;
-    }
-    REAL_CHECKIN_COOLDOWN[key] = now;
-    if (apiOk()) {
-      apiPost("/checkin", { placeId: pid, real: true }).then(() => {
+    const btn = $("realCheckinBtn");
+    btn.disabled = true;
+    try {
+      const res = await apiPost("/checkin", { placeId: pid, real: true });
+      if (res.bonus === 100) {
+        toast("+₹100 for checking in here!");
+      } else {
         toast("Checked in at " + P[pid].name + "!");
-        fetchCrowd();
-      }).catch(() => toast("Check-in failed. Try again."));
-    } else {
-      CROWD_DATA[pid] = (CROWD_DATA[pid] || 0) + 2;
-      renderCrowdPanel();
-      toast("Checked in at " + P[pid].name + " (offline)");
+      }
+      // Refresh portfolio and crowd
+      const [pf, cr] = await Promise.all([
+        apiGet("/portfolio").catch(() => null),
+        apiGet("/crowd").catch(() => null)
+      ]);
+      if (pf) SERVER_PORTFOLIO = pf;
+      if (cr) { CROWD_DATA = cr; renderCrowdPanel(); updateBusyRings(); }
+      render();
+      showRatingCard(pid);
+    } catch (err) {
+      if (err.status === 429) {
+        toast("Wait 10 minutes between check-ins here.");
+      } else {
+        toast(err.body?.error || "Check-in failed. Try again.");
+      }
+    } finally {
+      btn.disabled = false;
     }
   };
 }
 
-/* ===== SEED DEMO DATA (console function) ===== */
-window.seedDemoData = async function() {
-  const weighted = ["dh1","dh1","dh1","dh2","dh2","dh2","lib","lib","lib","lib","nes","nes","grub","anb","cnd"];
-  const promises = weighted.map(pid => {
+/* ===== SEED DEMO DATA (console helper) ===== */
+window.seedDemoData = async function () {
+  const weighted = ["dh1", "dh1", "dh1", "dh2", "dh2", "dh2", "lib", "lib", "lib", "lib", "nes", "nes", "grub", "anb", "cnd"];
+  for (const pid of weighted) {
     if (apiOk()) {
-      return apiPost("/checkin", { placeId: pid, real: true });
-    } else {
-      CROWD_DATA[pid] = (CROWD_DATA[pid] || 0) + 2;
-      return Promise.resolve();
+      await apiPost("/checkin", { placeId: pid, real: true }).catch(() => {});
     }
-  });
-  await Promise.all(promises);
-  if (!apiOk()) { renderCrowdPanel(); updateBusyRings(); buildTicker(); }
-  else fetchCrowd();
-  console.log("15 demo check-ins seeded (mess + library heavy)");
+  }
+  await pollMarket();
+  console.log("15 demo check-ins seeded.");
 };
 
-/* ===== INIT ===== */
-function init() {
-  S = { t: 0, cash: START_CASH, hold: {}, loc: "gate", sel: "gate", walk: null, pos: null, seen: new Set(["gate"]), over: false, msg: "" };
-  PLACES.forEach(([id]) => { const p = P[id]; p.pr = 0; p.pend = 0; p.p = target(p); p.open = p.p; });
-  $("news").innerHTML = ""; $("end").style.display = "none";
-  news("Campus opens at 08:00. You're at Gate 1 with " + inr(START_CASH) + ".");
-  buildMap(); render(); msg("Tap a building, walk there, then buy or sell. Walking costs campus time.");
-  clearInterval(loop); acc = 0; loop = setInterval(frame, 100);
-  if (apiOk()) startCrowdPolling();
-  buildTicker();
-  initHow();
-}
+/* ===== MAP INITIALIZATION ===== */
 function buildMap() {
   const road = (d, w, c) => `<path d="${d}" stroke="${c}" stroke-width="${w}"/>`;
   const lines = ["M500 610V270", "M40 270H960", "M150 505H900", "M210 270V545", "M780 270V545"];
@@ -296,104 +344,148 @@ function buildMap() {
       <text id="t_${id}" class="pt" y="4"></text></g>`;
     $("tiles").appendChild(g);
   });
-  $("tiles").onclick = e => { const g = e.target.closest(".tile"); if (g) { S.sel = g.dataset.id; render(); } };
-}
-function news(t) { const p = document.createElement("p"); p.innerHTML = `<small>${fmtH(hour())}</small> `; p.append(t); $("news").prepend(p); }
-function toast(t) { const e = $("toast"); e.textContent = t; e.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove("on"), 3800); }
-function msg(t) { S.msg = t; const m = $("msg"); if (m) m.textContent = t; }
-function frame() {
-  if (S.over) return;
-  if (S.walk) {
-    const w = S.walk; w.el += .1; const k = Math.min(1, w.el / w.dur), a = P[w.from], b = P[w.to];
-    S.pos = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
-    $("trail").setAttribute("d", `M${a.x} ${a.y}L${b.x} ${b.y}`);
-    if (k >= 1) { S.loc = w.to; S.walk = null; S.pos = null; $("trail").setAttribute("d", ""); arrive(w.to); }
-  }
-  acc += .1; if (acc >= .999) { acc = 0; tick(); }
-  const q = S.pos || P[S.loc]; $("me").setAttribute("transform", `translate(${q.x},${q.y - (S.walk ? 6 : 26)})`);
-  $("me").classList.toggle("walking", !!S.walk);
-}
-function arrive(id) {
-  S.sel = id;
-  if (!S.seen.has(id)) {
-    S.seen.add(id);
-    S.cash += 100;
-    news("Checked in at " + P[id].name + ": +₹100.");
-    toast("Checked in at " + P[id].name + "  +₹100");
-    if (apiOk()) {
-      apiPost("/checkin", { placeId: id }).catch(() => {});
+  $("tiles").onclick = e => {
+    const g = e.target.closest(".tile");
+    if (g) {
+      SELECTED_PLACE = g.dataset.id;
+      render();
     }
-    // Show rating card after check-in
-    showRatingCard(id);
-  }
-  msg("You're at " + P[id].name + ". You can trade here."); render();
+  };
+  if ($("me")) $("me").style.display = "none";
+  if ($("trail")) $("trail").style.display = "none";
 }
-function tick() {
-  S.t++;
-  PLACES.forEach(([id]) => { const p = P[id]; p.pr *= .985; p.p = Math.max(1, p.p + (target(p) - p.p) * .18 + p.p * .018 * randn()); });
-  Object.keys(S.hold).forEach(k => { S.cash += S.hold[k].q * P[k].p * .002; });
-  if (S.t % 14 === 0 || Math.random() < .03) {
-    const [txt, fx] = EVENTS[Math.floor(Math.random() * EVENTS.length)]; news(txt); toast(txt);
-    Object.keys(fx).forEach(k => PLACES.forEach(([id, , cat]) => { if (k === id || k === "@" + cat) P[id].p = Math.max(1, P[id].p * (1 + fx[k])); }));
-  }
-  if (S.t % 5 === 0) buildTicker();
-  render(); if (S.t >= GAME_SEC) finish();
+
+function news(t) {
+  const p = document.createElement("p");
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const ist = new Date(utc + (5.5 * 3600000));
+  const timeStr = String(ist.getHours()).padStart(2, "0") + ":" + String(ist.getMinutes()).padStart(2, "0");
+  p.innerHTML = `<small>${timeStr}</small> `;
+  p.append(t);
+  $("news").prepend(p);
 }
+
+function toast(t) {
+  const e = $("toast");
+  e.textContent = t;
+  e.classList.add("on");
+  clearTimeout(toastT);
+  toastT = setTimeout(() => e.classList.remove("on"), 3800);
+}
+
+/* ===== RENDER FUNCTION ===== */
 function render() {
-  tint(hour());
+  // Update tile prices & selected outline
   PLACES.forEach(([id]) => {
-    const p = P[id], c = (p.p / p.open - 1) * 100, e = $("t_" + id);
-    e.textContent = "₹" + p.p.toFixed(0) + (c >= 0 ? " ▲" : " ▼"); e.setAttribute("fill", c >= 0 ? "#347A57" : "#e5484d");
-    e.parentNode.parentNode.classList.toggle("sel", id === S.sel);
+    const sp = SERVER_PRICES[id];
+    const cur = sp ? sp.price : P[id].base;
+    const prev = sp ? sp.prevHourPrice : cur;
+    const c = prev > 0 ? ((cur / prev - 1) * 100) : 0;
+    const e = $("t_" + id);
+    if (e) {
+      e.textContent = "₹" + Math.round(cur) + (c >= 0 ? " ▲" : " ▼");
+      e.setAttribute("fill", c >= 0 ? "#347A57" : "#e5484d");
+      e.parentNode.parentNode.classList.toggle("sel", id === SELECTED_PLACE);
+    }
   });
-  $("clock").textContent = fmtH(hour()); $("cash").textContent = inr(S.cash);
-  const w = worth(); $("net").textContent = inr(w); $("net").style.color = w >= START_CASH ? "var(--up)" : "var(--down)";
-  $("visits").textContent = S.seen.size + "/" + PLACES.length;
-  const p = P[S.sel], cat = CATS[p.cat], c = (p.p / p.open - 1) * 100, h = S.hold[p.id] || { q: 0, avg: 0 }, here = S.loc === p.id && !S.walk;
-  const crowd = p.pr > 4 ? "buying heavily, prices climbing" : p.pr < -4 ? "selling off, prices sinking" : "quiet";
-  const secs = Math.ceil(dist(P[S.loc], p) / SPEED);
-  // Rating info for selected place
+
+  // Header stickers
+  const cash = SERVER_PORTFOLIO.cash || 0;
+  const netWorth = SERVER_PORTFOLIO.netWorth || cash;
+  const bonusCount = (SERVER_PORTFOLIO.bonusPlaces || []).length;
+  if ($("cash")) $("cash").textContent = inr(cash);
+  if ($("net")) {
+    $("net").textContent = inr(netWorth);
+    $("net").style.color = netWorth >= 10000 ? "var(--up)" : "var(--down)";
+  }
+  if ($("visits")) $("visits").textContent = bonusCount + "/" + PLACES.length;
+
+  // Selected place card
+  const p = P[SELECTED_PLACE] || P["lib"];
+  const cat = CATS[p.cat];
+  const sp = SERVER_PRICES[p.id];
+  const curPrice = sp ? sp.price : p.base;
+  const prevPrice = sp ? sp.prevHourPrice : curPrice;
+  const chg = prevPrice > 0 ? ((curPrice / prevPrice - 1) * 100) : 0;
+  const holdings = SERVER_PORTFOLIO.holdings || {};
+  const h = holdings[p.id] || { q: 0, avg: 0 };
+  const crowd = CROWD_DATA[p.id] || 0;
+  const crowdDesc = crowd >= 5 ? "packed with students" : crowd >= 2 ? "busy" : "quiet";
+
   const ri = PLACE_RATINGS[p.id];
   const ratingHtml = ri ? `<div class="dim" style="margin-top:6px">Rating: ${"★".repeat(Math.round(ri.avg))}${"☆".repeat(5 - Math.round(ri.avg))} ${ri.avg.toFixed(1)} · ${ri.tag || "—"}</div>` : "";
-  $("card").innerHTML = `<div class="card-label">MARKET</div><span class="kind" style="background:${cat.c}">${cat.n}</span><div class="nm">${p.name}</div>
-    <div class="price ${c >= 0 ? "up" : "down"}">₹${p.p.toFixed(2)}<small>${c >= 0 ? "▲" : "▼"} ${Math.abs(c).toFixed(1)}% today</small></div>
-    <div class="dim" style="margin-top:8px">How busy it is right now</div><div class="meter"><i style="width:${Math.min(100, demand(p.cat, hour()) * 85)}%"></i></div>
-    <div class="dim">${cat.t}</div>
-    <div class="dim" style="margin-top:6px">Crowd: <b style="color:var(--ink)">${crowd}</b></div>
+
+  $("card").innerHTML = `
+    <div class="card-label">MARKET</div>
+    <span class="kind" style="background:${cat.c}">${cat.n}</span>
+    <div class="nm">${p.name}</div>
+    <div class="price ${chg >= 0 ? "up" : "down"}">
+      ₹${curPrice.toFixed(2)}
+      <small>${chg >= 0 ? "▲" : "▼"} ${Math.abs(chg).toFixed(1)}% vs 1h ago</small>
+    </div>
+    <div class="dim" style="margin-top:8px">${cat.t}</div>
+    <div class="dim" style="margin-top:6px">Crowd: <b style="color:var(--ink)">${crowdDesc}</b> (${crowd} active)</div>
     ${ratingHtml}
-    <div class="dim" style="margin-top:8px">You hold <b style="color:var(--ink)">${h.q}</b> shares${h.q ? " (avg ₹" + h.avg.toFixed(2) + ")" : ""}</div>
-    ${here ? `<div class="row"><select id="qty" aria-label="Shares"><option>1</option><option>5</option><option>10</option></select><button class="buy" id="buy">Buy</button><button class="sell" id="sell">Sell</button></div>`
-      : `<div class="row"><button class="go" id="go" ${S.walk ? "disabled" : ""}>${S.walk ? "Walking..." : "Walk here · about " + secs + "s"}</button></div>`}
-    <div id="msg">${S.msg}</div>`;
-  if ($("go")) $("go").onclick = () => { S.walk = { from: S.loc, to: p.id, el: 0, dur: Math.max(.5, dist(P[S.loc], p) / SPEED) }; S.pos = { x: P[S.loc].x, y: P[S.loc].y }; msg("Walking to " + p.name + "..."); render(); };
-  if ($("buy")) { $("buy").onclick = () => trade(1); $("sell").onclick = () => trade(-1); }
-  $("port").innerHTML = Object.keys(S.hold).filter(k => S.hold[k].q > 0).map(k => {
-    const x = S.hold[k], pl = (P[k].p - x.avg) * x.q;
-    return `<div><span>${P[k].name} × ${x.q}</span><b class="${pl >= 0 ? "up" : "down"}">${pl >= 0 ? "+" : "-"}${inr(Math.abs(pl))}</b></div>`;
-  }).join("") || `<div class="empty-sticker">Nothing yet. Walk somewhere and buy.</div>`;
-}
-function trade(side) {
-  const p = P[S.sel], q = +$("qty").value, h = S.hold[p.id] || (S.hold[p.id] = { q: 0, avg: 0 });
-  if (side > 0) {
-    const cost = p.p * q; if (cost > S.cash) { msg("Not enough cash. Try fewer shares."); return render(); }
-    h.avg = (h.avg * h.q + cost) / (h.q + q); h.q += q; S.cash -= cost; p.pr += q; p.p *= 1 + q * .004;
-    msg("Bought " + q + " at ₹" + p.p.toFixed(2) + ".");
-    toast("Bought " + q + " shares of " + p.name);
+    <div class="dim" style="margin-top:8px">You hold <b style="color:var(--ink)">${h.q}</b> shares${h.q ? " (avg ₹" + Number(h.avg).toFixed(2) + ")" : ""}</div>
+    <div class="row">
+      <select id="qty" aria-label="Shares">
+        <option value="1">1</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+      </select>
+      <button class="buy" id="buy">Buy</button>
+      <button class="sell" id="sell">Sell</button>
+    </div>
+  `;
+
+  if ($("buy")) $("buy").onclick = () => trade("buy");
+  if ($("sell")) $("sell").onclick = () => trade("sell");
+
+  // Portfolio list
+  const portEl = $("port");
+  const heldKeys = Object.keys(holdings).filter(k => holdings[k].q > 0);
+  if (heldKeys.length > 0) {
+    portEl.innerHTML = heldKeys.map(k => {
+      const x = holdings[k];
+      const pObj = P[k];
+      const cur = SERVER_PRICES[k] ? SERVER_PRICES[k].price : pObj.base;
+      const pl = (cur - x.avg) * x.q;
+      return `<div><span>${pObj.name} × ${x.q}</span><b class="${pl >= 0 ? "up" : "down"}">${pl >= 0 ? "+" : "-"}${inr(Math.abs(pl))}</b></div>`;
+    }).join("");
   } else {
-    if (q > h.q) { msg("You don't hold that many here."); return render(); }
-    h.q -= q; S.cash += p.p * q; p.pr -= q; p.p *= 1 - q * .004;
-    msg("Sold " + q + " at ₹" + p.p.toFixed(2) + ".");
-    toast("Sold " + q + " shares of " + p.name);
+    portEl.innerHTML = `<div class="empty-sticker">Nothing yet. Buy shares in campus places.</div>`;
   }
-  render();
 }
-function finish() {
-  S.over = true; clearInterval(loop); if (crowdTimer) clearInterval(crowdTimer);
-  const w = worth(), pl = w - START_CASH;
-  $("endT").textContent = pl > 4000 ? "Chancellor of Campus Capital" : pl > 1000 ? "Profitable Fresher" : pl > -1000 ? "Still Finding the Canteen" : "Please Stick to Chai";
-  $("endP").textContent = "Net worth " + inr(w) + " (" + (pl >= 0 ? "+" : "-") + inr(Math.abs(pl)) + "). You checked in at " + S.seen.size + " of " + PLACES.length + " places. Screenshot this and challenge a friend.";
-  saveScore(w);
-  $("end").style.display = "grid";
+
+/* ===== TRADING (Server-authoritative) ===== */
+async function trade(side) {
+  const qtyEl = $("qty");
+  const qty = qtyEl ? parseInt(qtyEl.value, 10) : 1;
+  const buyBtn = $("buy"), sellBtn = $("sell");
+  if (buyBtn) buyBtn.disabled = true;
+  if (sellBtn) sellBtn.disabled = true;
+  try {
+    const res = await apiPost("/trade", { placeId: SELECTED_PLACE, side, qty });
+    if (res.portfolio) {
+      SERVER_PORTFOLIO = res.portfolio;
+    }
+    const action = side === "buy" ? "Bought " : "Sold ";
+    toast(`${action} ${qty} shares of ${P[SELECTED_PLACE].name} at ₹${res.executedPrice.toFixed(2)}`);
+    render();
+  } catch (err) {
+    if (err.status === 409) {
+      toast("Trade conflict. Refreshing portfolio, please retry.");
+      await apiGet("/portfolio").then(p => { SERVER_PORTFOLIO = p; render(); }).catch(() => {});
+    } else {
+      toast(err.body?.error || err.message || "Trade failed.");
+    }
+  } finally {
+    if (buyBtn) buyBtn.disabled = false;
+    if (sellBtn) sellBtn.disabled = false;
+  }
 }
 
 /* ===== RATINGS ===== */
@@ -435,7 +527,6 @@ if ($("submitRating")) $("submitRating").onclick = () => {
       .then(() => { toast("Rating saved!"); $("ratingCard").style.display = "none"; fetchPlaceRating(pid); })
       .catch(() => toast("Failed to save rating."));
   } else {
-    // Offline fallback
     PLACE_RATINGS[pid] = { avg: selectedRatingStars, tag: selectedRatingTag };
     toast("Rating saved (offline)");
     $("ratingCard").style.display = "none";
@@ -455,30 +546,25 @@ async function fetchPlaceRating(placeId) {
   } catch (e) { /* silent */ }
 }
 
-/* ===== Players (localStorage + API) ===== */
-const DB_KEY = "snu_exchange_v1";
-const loadDB = () => { try { return JSON.parse(localStorage.getItem(DB_KEY)) || { games: 0, best: null } } catch (e) { return { games: 0, best: null } } };
-const saveDB = db => { try { localStorage.setItem(DB_KEY, JSON.stringify(db)); return true } catch (e) { return false } };
-let PLAYER = null, REMOTE_LB = null;
-
+/* ===== LEADERBOARD ===== */
 async function fetchLeaderboard() {
   try {
     if (apiOk()) {
       const data = await apiGet("/leaderboard");
       REMOTE_LB = data.map(r => ({ name: r.displayName || r.username, best: r.bestScore }));
     }
-  } catch (e) { /* silent, localStorage fallback */ }
+  } catch (e) { /* silent */ }
   renderLb();
 }
 
 function renderLb() {
-  const rows = REMOTE_LB || (loadDB().best !== null ? [{ name: currentName(), best: loadDB().best }] : []);
-  const html = rows.length ? rows.map((u, i) => `<div><span>${i + 1}. ${(u.name || "").replace(/[<>&]/g, "")}</span><b>${inr(u.best)}</b></div>`).join("") : `<div class="empty-sticker">No scores yet. Be the first.</div>`;
-  $("lb").innerHTML = html; $("endLb").innerHTML = html;
+  const rows = REMOTE_LB || [];
+  const html = rows.length ? rows.map((u, i) => `<div><span>${i + 1}. ${(u.name || "").replace(/[<>&]/g, "")}</span><b>${inr(u.best)}</b></div>`).join("") : `<div class="empty-sticker">No scores yet today. Be the first.</div>`;
+  if ($("lb")) $("lb").innerHTML = html;
 }
 
 /* ===== AUTH UI ===== */
-let authMode = "login"; // "login" or "signup"
+let authMode = "login";
 
 function setupAuthToggle() {
   const loginBtn = $("authLoginBtn"), signupBtn = $("authSignupBtn");
@@ -500,7 +586,7 @@ function setAuthMode(mode) {
 }
 
 function showLogin() {
-  S && (S.over = true); clearInterval(loop); $("end").style.display = "none";
+  stopPolling();
   setAuthMode("login");
   if ($("aemail")) $("aemail").value = "";
   if ($("apw")) $("apw").value = "";
@@ -525,10 +611,20 @@ function updateHeaderUser() {
 }
 
 function logout() {
+  stopPolling();
   AUTH_TOKEN = null;
   AUTH_USER = null;
+  MY_PROFILE = null;
+  SERVER_PORTFOLIO = { cash: 10000, holdings: {}, bonusPlaces: [], netWorth: 10000, dayKey: "" };
+  SERVER_PRICES = {};
+  CROWD_DATA = {};
+  CURRENT_NEWS = "";
   localStorage.removeItem("snu_token");
   localStorage.removeItem("snu_user");
+  localStorage.removeItem("snu_profile");
+  document.querySelectorAll(".modal-overlay").forEach(m => m.style.display = "none");
+  if ($("wavePanel")) $("wavePanel").style.display = "none";
+  if ($("ratingCard")) $("ratingCard").style.display = "none";
   updateHeaderUser();
   showLogin();
 }
@@ -558,12 +654,10 @@ async function doAuth() {
         return err(e.body?.error || "Signup failed.");
       }
     } else {
-      // Offline fallback
       AUTH_USER = { email: emailVal, name };
       localStorage.setItem("snu_user", JSON.stringify(AUTH_USER));
     }
   } else {
-    // Login
     if (apiOk()) {
       try {
         const res = await apiPost("/login", { email: emailVal, password: pw });
@@ -575,40 +669,19 @@ async function doAuth() {
         return err(e.body?.error || "Wrong email or password.");
       }
     } else {
-      // Offline fallback: check localStorage
-      const existing = localStorage.getItem("snu_user");
-      if (existing) {
-        AUTH_USER = JSON.parse(existing);
-      } else {
-        AUTH_USER = { email: emailVal, name: emailVal.split("@")[0] };
-        localStorage.setItem("snu_user", JSON.stringify(AUTH_USER));
-      }
+      AUTH_USER = { email: emailVal, name: emailVal.split("@")[0] };
+      localStorage.setItem("snu_user", JSON.stringify(AUTH_USER));
     }
   }
 
-  PLAYER = AUTH_USER.email;
   $("who").textContent = AUTH_USER.name;
   updateHeaderUser();
   $("login").style.display = "none";
-  fetchLeaderboard();
-  init();
-}
-
-function saveScore(w) {
-  if (apiOk()) {
-    apiPost("/score", { score: Math.round(w) })
-      .then(() => { toast("Score saved!"); fetchLeaderboard(); })
-      .catch(() => {});
-  }
-  const db = loadDB();
-  const first = db.best === null, better = first || w > db.best;
-  db.games = (db.games || 0) + 1; if (better) db.best = w;
-  saveDB(db); renderLb();
-  $("endP").textContent += better ? (first ? " First score saved." : " New personal best!") : " Your best is " + inr(db.best) + ".";
+  startPolling();
 }
 
 /* ===== CONNECT TAB ===== */
-let MY_PROFILE = null, WAVE_TIMER = null;
+let MY_PROFILE = null;
 const SAMPLE_STUDENTS = [
   { username: "arjun_k", department: "CSE", batch: "2025", interests: ["Coding", "AI/ML", "Gaming"], avatarColor: "#3a56e8" },
   { username: "priya_m", department: "ECE", batch: "2025", interests: ["Robotics", "Music", "Photography"], avatarColor: "#19b36a" },
@@ -635,7 +708,6 @@ function loadConnect() {
 $("openProfileModal").onclick = () => { $("profileModal").style.display = "grid"; };
 $("closeProfileModal").onclick = () => { $("profileModal").style.display = "none"; };
 
-// Interest chip selection
 document.querySelectorAll("#profInterests .tag-chip").forEach(btn => {
   btn.onclick = () => {
     const active = document.querySelectorAll("#profInterests .tag-chip.active");
@@ -672,7 +744,6 @@ async function fetchStudents() {
   } catch (e) {
     students = SAMPLE_STUDENTS;
   }
-  // Filter out self
   students = students.filter(s => s.username !== MY_PROFILE?.username);
   if (diffDept && MY_PROFILE) students = students.filter(s => s.department !== MY_PROFILE.department);
   if (!students.length) {
@@ -697,7 +768,7 @@ $("filterDept").onchange = fetchStudents;
 $("filterBatch").onchange = fetchStudents;
 $("filterDiffDept").onchange = fetchStudents;
 
-window.sendWave = async function(toUser) {
+window.sendWave = async function (toUser) {
   if (apiOk()) {
     apiPost("/wave", { toUser }).then(() => toast("Waved at " + toUser + "!")).catch(() => toast("Wave failed."));
   } else { toast("Waved at " + toUser + " (offline)"); }
@@ -733,10 +804,10 @@ $("waveBell").onclick = () => {
 /* ===== LOST & FOUND TAB ===== */
 let LF_ITEMS = [];
 const SAMPLE_ITEMS = [
-  { itemId: "s1", type: "lost", title: "Blue water bottle", description: "Lost near A Block after 10am class", placeId: "a", reportedBy: "arjun", contact: "arjun@snu.edu.in", status: "open", createdAt: Date.now()/1000 - 3600 },
-  { itemId: "s2", type: "found", title: "Black umbrella", description: "Found at CnD counter", placeId: "cnd", reportedBy: "priya", contact: "priya@snu.edu.in", status: "open", createdAt: Date.now()/1000 - 7200 },
-  { itemId: "s3", type: "lost", title: "Notebook with green cover", description: "Left in Central Library 2nd floor", placeId: "lib", reportedBy: "rahul", contact: "wa.me/91xxxxxxxxxx", status: "open", createdAt: Date.now()/1000 - 1800 },
-  { itemId: "s4", type: "found", title: "ID card - Neha R.", description: "Found on basketball court bench", placeId: "bask", reportedBy: "aman", contact: "aman@snu.edu.in", status: "open", createdAt: Date.now()/1000 - 600 },
+  { itemId: "s1", type: "lost", title: "Blue water bottle", description: "Lost near A Block after 10am class", placeId: "a", reportedBy: "arjun", contact: "arjun@snu.edu.in", status: "open", createdAt: Date.now() / 1000 - 3600 },
+  { itemId: "s2", type: "found", title: "Black umbrella", description: "Found at CnD counter", placeId: "cnd", reportedBy: "priya", contact: "priya@snu.edu.in", status: "open", createdAt: Date.now() / 1000 - 7200 },
+  { itemId: "s3", type: "lost", title: "Notebook with green cover", description: "Left in Central Library 2nd floor", placeId: "lib", reportedBy: "rahul", contact: "wa.me/91xxxxxxxxxx", status: "open", createdAt: Date.now() / 1000 - 1800 },
+  { itemId: "s4", type: "found", title: "ID card - Neha R.", description: "Found on basketball court bench", placeId: "bask", reportedBy: "aman", contact: "aman@snu.edu.in", status: "open", createdAt: Date.now() / 1000 - 600 },
 ];
 
 function initLfDropdowns() {
@@ -811,13 +882,13 @@ function timeAgo(ts) {
   return Math.floor(s / 86400) + "d ago";
 }
 
-window.revealContact = function(btn, contact) {
+window.revealContact = function (btn, contact) {
   const reveal = btn.parentNode.parentNode.querySelector(".lf-contact-reveal");
   reveal.textContent = "Contact: " + contact;
   reveal.style.display = "block";
 };
 
-window.resolveItem = async function(itemId, btn) {
+window.resolveItem = async function (itemId, btn) {
   if (apiOk()) {
     apiPost("/items/resolve", { itemId }).then(() => { toast("Marked as returned!"); loadLostFound(); }).catch(e => toast(e.body?.error || "Failed."));
   } else {
@@ -827,7 +898,7 @@ window.resolveItem = async function(itemId, btn) {
   }
 };
 
-window.deleteItem = async function(itemId) {
+window.deleteItem = async function (itemId) {
   if (!confirm("Delete this item?")) return;
   if (apiOk()) {
     apiPost("/items/delete", { itemId }).then(() => { toast("Item deleted."); loadLostFound(); }).catch(e => toast(e.body?.error || "Failed."));
@@ -861,7 +932,7 @@ $("reportFound").onclick = () => { $("lfType").value = "found"; $("lfModalTitle"
 $("lfCancel").onclick = () => { $("lfModal").style.display = "none"; resetLfPhoto(); };
 
 /* ===== PHOTO UPLOAD HELPERS ===== */
-let lfPhotoBlob = null; // the resized JPEG blob ready for upload
+let lfPhotoBlob = null;
 
 function resetLfPhoto() {
   lfPhotoBlob = null;
@@ -923,7 +994,6 @@ $("lfSubmit").onclick = async () => {
   const title = $("lfTitle").value.trim(), desc = $("lfDesc").value.trim(), place = $("lfPlace").value, contact = $("lfContact").value.trim(), type = $("lfType").value;
   if (!title || !place || !contact) { toast("Fill in title, place, and contact!"); return; }
   if (apiOk()) {
-    // Upload photo first if present
     let imageKey = null;
     if (lfPhotoBlob) {
       $("lfSubmit").disabled = true; $("lfSubmit").textContent = "Uploading photo…";
@@ -952,18 +1022,24 @@ $("lgo").onclick = doAuth;
 if ($("apw")) $("apw").addEventListener("keydown", e => { if (e.key === "Enter") doAuth(); });
 if ($("aemail")) $("aemail").addEventListener("keydown", e => { if (e.key === "Enter") $("apw").focus(); });
 if ($("logoutBtn")) $("logoutBtn").onclick = logout;
-$("restart").onclick = init; $("again").onclick = init;
-if ($("heroPlay")) $("heroPlay").onclick = () => { if (AUTH_USER) { document.querySelector("main").scrollIntoView({ behavior: "smooth" }); } else { showLogin(); } };
-initRealCheckin();
+if ($("heroPlay")) $("heroPlay").onclick = () => {
+  if (AUTH_USER) {
+    document.querySelector("main").scrollIntoView({ behavior: "smooth" });
+  } else {
+    showLogin();
+  }
+};
 
-// Auto-login if token exists
+buildMap();
+initRealCheckin();
+initHow();
+
+// Auto-login or show login
 if (AUTH_TOKEN && AUTH_USER) {
-  PLAYER = AUTH_USER.email;
   $("who").textContent = AUTH_USER.name;
   updateHeaderUser();
   $("login").style.display = "none";
-  fetchLeaderboard();
-  init();
+  startPolling();
 } else {
   fetchLeaderboard();
   showLogin();

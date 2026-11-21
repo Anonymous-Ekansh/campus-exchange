@@ -752,26 +752,6 @@ button:disabled { opacity: .45; cursor: default; }
 .modal-box input:focus-visible, .modal-box textarea:focus-visible { outline: 3px solid var(--mag); outline-offset: 2px; }
 .interest-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 
-#end {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: #1A1A18cc;
-  place-items: center;
-  padding: 20px;
-  z-index: 30;
-}
-#end > div {
-  background: #fff;
-  padding: 28px;
-  max-width: 420px;
-  text-align: center;
-  border: 2px solid var(--ink);
-  box-shadow: 6px 6px 0 var(--mag);
-}
-#end h3 { font: 900 26px/1.1 var(--serif); margin-bottom: 10px; }
-#end p  { margin-bottom: 16px; font-size: 13px; }
-
 #login {
   position: fixed;
   inset: 0;
@@ -837,7 +817,6 @@ button:disabled { opacity: .45; cursor: default; }
   border-top: 1px solid #0000000f;
   font-size: 13px;
 }
-#endLb { text-align: left; margin-bottom: 16px; }
 
 /* ============================================================
    BOTTOM NAV (mobile, <700px)
