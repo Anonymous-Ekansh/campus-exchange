@@ -17,12 +17,21 @@
     <span class="brand-divider"></span>
     <span class="brand-tagline">Shiv Nadar University · trade the campus</span>
   </div>
-  <nav class="nav-tabs">
-    <a class="nav-tab active" href="#">Market</a>
-    <a class="nav-tab" href="#">Connect</a>
+  <nav class="nav-tabs" id="navTabs">
+    <a class="nav-tab active" href="#" data-tab="market">Market</a>
+    <a class="nav-tab" href="#" data-tab="connect">Connect</a>
+    <a class="nav-tab" href="#" data-tab="lostfound">Lost &amp; Found</a>
   </nav>
 </header>
 <div class="ink-rule"></div>
+
+<!-- ───── TICKER STRIP ───── -->
+<div class="ticker-wrap" id="tickerWrap">
+  <div class="ticker" id="ticker"></div>
+</div>
+
+<!-- ───── TAB: MARKET ───── -->
+<div id="tabMarket" class="tab-content active">
 
 <!-- ───── HERO STRIP ───── -->
 <section class="hero-strip">
@@ -31,7 +40,7 @@
     <h1 class="hero-headline">See where campus is.<br>Meet <span class="underline-green">who's there</span>.</h1>
     <div class="hero-btns">
       <button class="btn-mag" id="heroPlay">Start playing ↗</button>
-      <button class="btn-outline">How it works ↗</button>
+      <button class="btn-outline" id="howBtn">How it works ↗</button>
     </div>
   </div>
   <div class="hero-right">
@@ -45,11 +54,31 @@
   </div>
 </section>
 
+<!-- ───── HOW IT WORKS ───── -->
+<div class="card how-card" id="howCard" style="display:none">
+  <button class="how-dismiss" id="howDismiss" aria-label="Dismiss">✕</button>
+  <div class="card-label">HOW IT WORKS</div>
+  <h2>3 steps to play</h2>
+  <div class="how-steps">
+    <div class="how-step"><span class="how-num">1</span><b>Check in</b><br>Walk to a building on the map to check in and earn ₹100.</div>
+    <div class="how-step"><span class="how-num">2</span><b>Move the market</b><br>Buy and sell shares of campus places. Prices rise with demand.</div>
+    <div class="how-step"><span class="how-num">3</span><b>See who's there</b><br>Real student check-ins move prices. Watch the crowd and trade smart.</div>
+  </div>
+</div>
+
+<!-- ───── REAL CHECK-IN ───── -->
+<div class="real-checkin-bar" id="realCheckinBar">
+  <select id="realPlace" aria-label="Choose a place">
+    <option value="">Pick your location…</option>
+  </select>
+  <button class="btn-mag btn-sm" id="realCheckinBtn">📍 I'm here right now</button>
+  <span class="dim" style="font-size:11px">The game is the fun, this is the data.</span>
+</div>
+
 <!-- ───── MAIN ───── -->
 <main>
   <div class="mapwrap">
     <svg id="map" viewBox="0 0 1000 620" aria-label="Schematic campus map">
-      <!-- cream ground with grid -->
       <defs>
         <pattern id="gridPat" width="20" height="20" patternUnits="userSpaceOnUse">
           <path d="M20 0L0 0 0 20" fill="none" stroke="#c5cfb6" stroke-width="0.5"/>
@@ -62,20 +91,107 @@
       <g id="trees"></g>
       <path id="trail" fill="none" stroke="#ff3fb4" stroke-width="4" stroke-dasharray="2 9" stroke-linecap="round"/>
       <g id="tiles"></g>
+      <g id="lostBadges"></g>
       <g id="me"><ellipse cy="10" rx="9" ry="3.5" fill="#0003"/><g class="body"><circle r="9" fill="#ff3fb4" stroke="#1a1f2b" stroke-width="3"/><circle cx="-3" cy="-2" r="1.6" fill="#1a1f2b"/><circle cx="3" cy="-2" r="1.6" fill="#1a1f2b"/><text y="-17" class="lbl tape-label" style="stroke:#fff">you</text></g></g>
       <rect id="tint" width="1000" height="620" fill="#fff" opacity="0" pointer-events="none"/>
     </svg>
     <div id="toast"></div>
   </div>
   <div class="side">
-    <section class="card main" id="card"></section>
-    <section class="card"><div class="card-label">01 / MARKET</div><h2>Campus news</h2><div id="news"></div></section>
-    <section class="card"><div class="card-label">02 / PORTFOLIO</div><h2>Your shares</h2><div id="port"></div></section>
-    <section class="card" id="crowdCard"><div class="card-label">03 / LIVE</div><h2>Where is everyone right now?</h2><div id="crowdPanel"></div></section>
-    <section class="card"><div class="card-label">04 / LEADERBOARD</div><h2>Leaderboard</h2><div id="lb" class="lb"></div></section>
+    <section class="card main" id="card"><div class="skeleton-block"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></section>
+    <section class="card"><div class="card-label">01 / MARKET</div><h2>Campus news</h2><div id="news"><div class="empty-sticker">📰 News will appear as the market moves.</div></div></section>
+    <section class="card"><div class="card-label">02 / PORTFOLIO</div><h2>Your shares</h2><div id="port"><div class="empty-sticker">📦 Nothing yet. Walk somewhere and buy.</div></div></section>
+    <section class="card" id="crowdCard"><div class="card-label">03 / LIVE</div><h2>Where is everyone right now?</h2><div id="crowdPanel"><div class="skeleton-line"></div><div class="skeleton-line short"></div><div class="skeleton-line"></div></div></section>
+    <section class="card"><div class="card-label">04 / LEADERBOARD</div><h2>Leaderboard</h2><div id="lb" class="lb"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div></section>
+
+    <!-- ───── RATING CARD (shown after check-in) ───── -->
+    <section class="card" id="ratingCard" style="display:none">
+      <div class="card-label">05 / RATE</div>
+      <h2>How is it here?</h2>
+      <div id="ratingStars" class="rating-stars">
+        <button data-star="1" aria-label="1 star">☆</button>
+        <button data-star="2" aria-label="2 stars">☆</button>
+        <button data-star="3" aria-label="3 stars">☆</button>
+        <button data-star="4" aria-label="4 stars">☆</button>
+        <button data-star="5" aria-label="5 stars">☆</button>
+      </div>
+      <div id="ratingTags" class="rating-tags">
+        <button class="tag-chip" data-tag="Clean">Clean</button>
+        <button class="tag-chip" data-tag="Slow">Slow</button>
+        <button class="tag-chip" data-tag="Noisy">Noisy</button>
+        <button class="tag-chip" data-tag="Great">Great</button>
+      </div>
+      <button class="btn-mag btn-sm" id="submitRating">Submit</button>
+      <div id="placeRatingInfo" class="dim" style="margin-top:8px"></div>
+    </section>
   </div>
 </main>
 <p class="note">Schematic map, not to scale. Place names from Snoopy by Rohit J G (snoopy.rohitjg.com). Edit the PLACES list to match the real layout.</p>
+
+</div><!-- /tabMarket -->
+
+<!-- ───── TAB: CONNECT ───── -->
+<div id="tabConnect" class="tab-content">
+  <section class="connect-wrap">
+    <p class="eyebrow">✳ CONNECT</p>
+    <h1 class="hero-headline" style="margin-bottom:16px">Find your people<br>across <span class="underline-green">campus</span>.</h1>
+
+    <!-- Profile setup prompt -->
+    <div class="card" id="profilePrompt">
+      <div class="card-label">YOUR PROFILE</div>
+      <h2>Set up your profile to get discovered</h2>
+      <button class="btn-mag" id="openProfileModal">Set up profile ↗</button>
+    </div>
+
+    <!-- Filters -->
+    <div class="connect-filters" id="connectFilters" style="display:none">
+      <select id="filterDept" aria-label="Department"><option value="">All departments</option><option>CSE</option><option>ECE</option><option>ME</option><option>CE</option><option>Biotech</option><option>Chemistry</option><option>Physics</option><option>Maths</option><option>Economics</option><option>English</option><option>Sociology</option><option>Design</option></select>
+      <select id="filterBatch" aria-label="Batch"><option value="">All batches</option><option>2022</option><option>2023</option><option>2024</option><option>2025</option><option>2026</option></select>
+      <label class="toggle-label"><input type="checkbox" id="filterDiffDept"> Different department only</label>
+    </div>
+
+    <!-- Student grid -->
+    <div class="student-grid" id="studentGrid">
+      <div class="skeleton-line"></div><div class="skeleton-line short"></div>
+    </div>
+
+    <!-- Who's here -->
+    <div class="card" id="whoHereCard" style="display:none">
+      <div class="card-label">WHO'S HERE</div>
+      <h2 id="whoHereTitle">At this place</h2>
+      <div id="whoHereList"></div>
+    </div>
+
+    <!-- Wave bell -->
+    <div class="wave-bell" id="waveBell" title="Waves">
+      🔔 <span id="waveCount">0</span>
+    </div>
+    <div class="card" id="wavePanel" style="display:none">
+      <div class="card-label">WAVES 👋</div>
+      <h2>Someone waved at you!</h2>
+      <div id="waveList"></div>
+    </div>
+  </section>
+</div><!-- /tabConnect -->
+
+<!-- ───── TAB: LOST & FOUND ───── -->
+<div id="tabLostfound" class="tab-content">
+  <section class="lf-wrap">
+    <p class="eyebrow">✳ LOST &amp; FOUND</p>
+    <h1 class="hero-headline" style="margin-bottom:16px">Lost something?<br>Someone on campus <span class="underline-green">has it</span>.</h1>
+    <div class="hero-btns" style="margin-bottom:20px">
+      <button class="btn-mag" id="reportLost">I lost something</button>
+      <button class="btn-outline" id="reportFound">I found something</button>
+    </div>
+    <div class="connect-filters">
+      <select id="lfFilterPlace" aria-label="Filter by place"><option value="">All places</option></select>
+      <select id="lfFilterType" aria-label="Filter by type"><option value="">All</option><option value="lost">Lost</option><option value="found">Found</option></select>
+    </div>
+    <div class="lf-grid" id="lfGrid">
+      <div class="skeleton-line"></div><div class="skeleton-line short"></div><div class="skeleton-line"></div>
+    </div>
+  </section>
+</div><!-- /tabLostfound -->
 
 <!-- ───── LOGIN MODAL ───── -->
 <div id="login"><div>
@@ -91,7 +207,41 @@
 <!-- ───── END MODAL ───── -->
 <div id="end"><div><h3 id="endT"></h3><p id="endP"></p><div id="endLb" class="lb"></div><button id="again" class="btn-mag btn-full">Play again</button></div></div>
 
+<!-- ───── PROFILE MODAL ───── -->
+<div id="profileModal" class="modal-overlay" style="display:none"><div class="modal-box">
+  <h3>Set up your profile</h3>
+  <label class="dim">Department</label>
+  <select id="profDept" style="width:100%;margin-bottom:10px"><option value="">Choose…</option><option>CSE</option><option>ECE</option><option>ME</option><option>CE</option><option>Biotech</option><option>Chemistry</option><option>Physics</option><option>Maths</option><option>Economics</option><option>English</option><option>Sociology</option><option>Design</option></select>
+  <label class="dim">Batch</label>
+  <select id="profBatch" style="width:100%;margin-bottom:10px"><option value="">Choose…</option><option>2022</option><option>2023</option><option>2024</option><option>2025</option><option>2026</option></select>
+  <label class="dim">Interests (pick up to 5)</label>
+  <div id="profInterests" class="interest-chips">
+    <button class="tag-chip" data-int="Coding">Coding</button><button class="tag-chip" data-int="Music">Music</button><button class="tag-chip" data-int="Sports">Sports</button><button class="tag-chip" data-int="Art">Art</button><button class="tag-chip" data-int="Gaming">Gaming</button><button class="tag-chip" data-int="Reading">Reading</button><button class="tag-chip" data-int="Dance">Dance</button><button class="tag-chip" data-int="Photography">Photography</button><button class="tag-chip" data-int="Startups">Startups</button><button class="tag-chip" data-int="AI/ML">AI/ML</button><button class="tag-chip" data-int="Robotics">Robotics</button><button class="tag-chip" data-int="Finance">Finance</button>
+  </div>
+  <button class="btn-mag btn-full" id="saveProfile" style="margin-top:14px">Save profile</button>
+  <button class="btn-outline btn-full" id="closeProfileModal" style="margin-top:8px">Cancel</button>
+</div></div>
+
+<!-- ───── LOST/FOUND REPORT MODAL ───── -->
+<div id="lfModal" class="modal-overlay" style="display:none"><div class="modal-box">
+  <h3 id="lfModalTitle">Report</h3>
+  <input id="lfTitle" placeholder="What is it? (e.g. Blue water bottle)" maxlength="60" autocomplete="off">
+  <textarea id="lfDesc" placeholder="Description / details" rows="3" maxlength="200"></textarea>
+  <label class="dim">Where?</label>
+  <select id="lfPlace" style="width:100%;margin-bottom:10px"></select>
+  <input id="lfContact" placeholder="Your contact (WhatsApp / email)" maxlength="60" autocomplete="off">
+  <input type="hidden" id="lfType" value="lost">
+  <button class="btn-mag btn-full" id="lfSubmit">Submit report</button>
+  <button class="btn-outline btn-full" id="lfCancel" style="margin-top:8px">Cancel</button>
+</div></div>
+
+<!-- ───── MOBILE BOTTOM NAV ───── -->
+<nav class="bottom-nav" id="bottomNav">
+  <a class="bottom-tab active" href="#" data-tab="market">📊 Market</a>
+  <a class="bottom-tab" href="#" data-tab="connect">👋 Connect</a>
+  <a class="bottom-tab" href="#" data-tab="lostfound">🔍 Lost</a>
+</nav>
+
 <script src="script.js"></script>
 </body>
 </html>
-
