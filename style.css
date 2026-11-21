@@ -592,6 +592,14 @@ button:disabled { opacity: .45; cursor: default; }
   padding: 2px 8px;
   border: 1px solid var(--ink);
 }
+.student-card {
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.student-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--ink);
+}
 .student-card .wave-btn {
   margin-top: 10px;
   font: 700 12px var(--mono);
@@ -602,6 +610,95 @@ button:disabled { opacity: .45; cursor: default; }
   cursor: pointer;
   min-height: 44px;
   box-shadow: 3px 3px 0 var(--ink);
+  transition: background 0.15s, transform 0.1s;
+}
+.student-card .wave-btn.waved,
+.wave-btn.waved {
+  background: #b9f0d0 !important;
+  color: var(--ink) !important;
+  box-shadow: 2px 2px 0 var(--ink) !important;
+  cursor: default !important;
+}
+.student-modal-box {
+  max-width: 460px;
+  width: 92%;
+  position: relative;
+  text-align: left;
+}
+.student-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.student-modal-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 22px var(--mono);
+  color: #fff;
+  border: 3px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  flex-shrink: 0;
+}
+.student-modal-title {
+  font: 700 20px var(--serif);
+  line-height: 1.2;
+}
+.student-modal-sub {
+  font: 400 12px var(--mono);
+  color: var(--dim);
+  margin-top: 2px;
+}
+.student-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 14px 0;
+}
+.student-stat-pill {
+  background: #fff;
+  border: 2px solid var(--ink);
+  padding: 8px 10px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.student-stat-pill span {
+  display: block;
+  font: 700 9px var(--mono);
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.student-stat-pill b {
+  font: 700 15px var(--mono);
+  color: var(--ink);
+}
+.student-section-title {
+  font: 700 11px var(--mono);
+  color: var(--dim);
+  text-transform: uppercase;
+  margin-top: 14px;
+  margin-bottom: 6px;
+}
+.student-holdings-list {
+  background: #fdfaf2;
+  border: 2px solid var(--ink);
+  padding: 10px;
+  margin-bottom: 14px;
+  max-height: 110px;
+  overflow-y: auto;
+}
+.student-holdings-list div {
+  display: flex;
+  justify-content: space-between;
+  font: 700 11px var(--mono);
+  padding: 4px 0;
+  border-bottom: 1px dashed #0000001a;
+}
+.student-holdings-list div:last-child {
+  border-bottom: none;
 }
 .wave-bell {
   position: fixed;

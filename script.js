@@ -778,26 +778,25 @@ async function doAuth() {
 /* ===== CONNECT TAB ===== */
 let MY_PROFILE = null;
 const SAMPLE_STUDENTS = [
-  { username: "arjun_k", department: "CSE", batch: "2025", interests: ["Coding", "AI/ML", "Gaming"], avatarColor: "#3a56e8" },
-  { username: "priya_m", department: "ECE", batch: "2025", interests: ["Robotics", "Music", "Photography"], avatarColor: "#19b36a" },
-  { username: "rahul_s", department: "Design", batch: "2024", interests: ["Art", "Photography", "Startups"], avatarColor: "#ff6b3d" },
-  { username: "neha_r", department: "Economics", batch: "2026", interests: ["Finance", "Reading", "Dance"], avatarColor: "#D62FA8" },
-  { username: "aman_t", department: "Physics", batch: "2023", interests: ["Coding", "Music", "Sports"], avatarColor: "#f5c518" },
-  { username: "divya_p", department: "Biotech", batch: "2025", interests: ["Reading", "Dance", "Art"], avatarColor: "#e5484d" },
+  { username: "anonymous.demo@snu.edu.in", displayName: "Anonymous", department: "CSE", batch: "2025", interests: ["Coding", "AI/ML", "Gaming"], avatarColor: "#3a56e8" },
+  { username: "piyush.demo@snu.edu.in", displayName: "Piyush Singh", department: "ECE", batch: "2024", interests: ["Robotics", "Music", "Sports"], avatarColor: "#19b36a" },
+  { username: "garvit.demo@snu.edu.in", displayName: "Garvit Aryan", department: "Design", batch: "2025", interests: ["Art", "Photography", "Startups"], avatarColor: "#ff6b3d" },
+  { username: "nidhi.demo@snu.edu.in", displayName: "Nidhi", department: "Economics", batch: "2026", interests: ["Finance", "Reading", "Dance"], avatarColor: "#D62FA8" },
+  { username: "novesh.demo@snu.edu.in", displayName: "Novesh", department: "Physics", batch: "2023", interests: ["Coding", "Music", "Sports"], avatarColor: "#f5c518" },
+  { username: "paawan.demo@snu.edu.in", displayName: "Paawan", department: "Biotech", batch: "2025", interests: ["Reading", "Art", "Photography"], avatarColor: "#e5484d" },
 ];
+let LAST_STUDENTS = [];
 
 function loadConnect() {
   MY_PROFILE = JSON.parse(localStorage.getItem("snu_profile") || "null");
+  $("connectFilters").style.display = "flex";
   if (MY_PROFILE) {
     $("profilePrompt").style.display = "none";
-    $("connectFilters").style.display = "flex";
-    fetchStudents();
-    startWavePolling();
   } else {
     $("profilePrompt").style.display = "block";
-    $("connectFilters").style.display = "none";
-    $("studentGrid").innerHTML = `<div class="empty-sticker">Set up your profile to discover other students.</div>`;
   }
+  fetchStudents();
+  startWavePolling();
 }
 
 $("openProfileModal").onclick = () => { $("profileModal").style.display = "grid"; };
@@ -845,16 +844,25 @@ async function fetchStudents() {
     grid.innerHTML = `<div class="empty-sticker">No students found. Try different filters.</div>`;
     return;
   }
+  LAST_STUDENTS = students;
+  if (apiOk() && !MY_PROFILE && currentEmail()) {
+    const mine = students.find(s => s.username === currentEmail());
+    if (mine) {
+      MY_PROFILE = mine;
+      localStorage.setItem("snu_profile", JSON.stringify(MY_PROFILE));
+      $("profilePrompt").style.display = "none";
+    }
+  }
   grid.innerHTML = students.map(s => {
     const shared = MY_PROFILE ? (s.interests || []).filter(i => MY_PROFILE.interests.includes(i)).length : 0;
     const dispName = s.displayName || s.username || "?";
-    return `<div class="student-card">
+    return `<div class="student-card" onclick="openStudentModal('${s.username}')">
       <div class="avatar" style="background:${s.avatarColor || "#D62FA8"}">${(dispName)[0].toUpperCase()}</div>
       ${shared ? `<div class="s-badge">${shared} shared</div>` : ""}
       <div class="s-name">${dispName.replace(/[<>&]/g, "")}</div>
       <div class="s-dept">${s.department || ""} · ${s.batch || ""}</div>
       <div class="s-interests">${(s.interests || []).join(", ")}</div>
-      <button class="wave-btn" onclick="sendWave('${s.username}')">Wave</button>
+      <button class="wave-btn" onclick="event.stopPropagation(); sendWave('${s.username}', this)">Wave</button>
     </div>`;
   }).join("");
 }
@@ -863,11 +871,124 @@ $("filterDept").onchange = fetchStudents;
 $("filterBatch").onchange = fetchStudents;
 $("filterDiffDept").onchange = fetchStudents;
 
-window.sendWave = async function (toUser) {
+window.sendWave = async function (toUser, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Waving…";
+  }
   if (apiOk()) {
-    apiPost("/wave", { toUser }).then(() => toast("Waved at " + toUser + "!")).catch(() => toast("Wave failed."));
-  } else { toast("Waved at " + toUser + " (offline)"); }
+    try {
+      await apiPost("/wave", { toUser });
+      toast("Waved at " + toUser + "!");
+      if (btn) {
+        btn.textContent = "Waved!";
+        btn.classList.add("waved");
+      }
+    } catch (e) {
+      toast("Wave failed.");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Wave";
+      }
+    }
+  } else {
+    toast("Waved at " + toUser + " (offline)");
+    if (btn) {
+      btn.textContent = "Waved!";
+      btn.classList.add("waved");
+    }
+  }
 };
+
+/* ===== STUDENT DETAILS MODAL ===== */
+window.openStudentModal = async function (username) {
+  const modal = $("studentModal");
+  const content = $("studentModalContent");
+  if (!modal || !content) return;
+  modal.style.display = "grid";
+
+  const s = (LAST_STUDENTS || SAMPLE_STUDENTS).find(u => u.username === username) || { username, displayName: username.split("@")[0] };
+  const dispName = s.displayName || s.username || "?";
+
+  content.innerHTML = `
+    <div class="student-modal-header">
+      <div class="student-modal-avatar" style="background:${s.avatarColor || "#D62FA8"}">${dispName[0].toUpperCase()}</div>
+      <div>
+        <div class="student-modal-title">${dispName.replace(/[<>&]/g, "")}</div>
+        <div class="student-modal-sub">${(s.department || "")} · Batch ${(s.batch || "")}</div>
+        <div class="student-modal-sub" style="color:var(--dim)">${s.username}</div>
+      </div>
+    </div>
+    <div class="student-stat-grid">
+      <div class="student-stat-pill">
+        <span>Trading Cash</span>
+        <b id="smCash">...</b>
+      </div>
+      <div class="student-stat-pill">
+        <span>Net Worth</span>
+        <b id="smNet">...</b>
+      </div>
+    </div>
+    <div class="student-stat-pill" style="margin-bottom:12px">
+      <span>Campus Location</span>
+      <b id="smLoc" style="font-size:13px">Loading…</b>
+    </div>
+    <div class="student-section-title">Campus Shares Held</div>
+    <div class="student-holdings-list" id="smHoldings">
+      <div class="dim">Loading portfolio…</div>
+    </div>
+    <div class="student-section-title">Interests</div>
+    <div class="interest-chips" style="margin-bottom:14px">
+      ${(s.interests || []).map(i => `<span class="tag-chip active" style="cursor:default">${i}</span>`).join("") || '<span class="dim">None listed</span>'}
+    </div>
+    <button class="wave-btn btn-full" id="smWaveBtn" onclick="sendWave('${s.username}', this)">Wave at ${dispName.split(" ")[0]}</button>
+  `;
+
+  try {
+    let detail = null;
+    if (apiOk()) {
+      detail = await apiGet("/student-detail?user=" + encodeURIComponent(username));
+    }
+    if (detail) {
+      if ($("smCash")) $("smCash").textContent = inr(detail.cash || 0);
+      if ($("smNet")) $("smNet").textContent = inr(detail.netWorth || detail.cash || 0);
+      if ($("smLoc")) {
+        if (detail.latestCheckin && detail.latestCheckin.placeName) {
+          $("smLoc").innerHTML = `<span style="color:var(--green)">Active</span> at ${detail.latestCheckin.placeName} · ${timeAgo(detail.latestCheckin.timestamp)}`;
+        } else if (detail.visitedPlaces && detail.visitedPlaces.length > 0) {
+          const lastVisited = detail.visitedPlaces[detail.visitedPlaces.length - 1];
+          $("smLoc").textContent = "Explored " + (P[lastVisited]?.name || lastVisited) + " (" + detail.visitedPlaces.length + " places visited)";
+        } else {
+          $("smLoc").textContent = "On campus (no check-in yet)";
+        }
+      }
+      const hKeys = Object.keys(detail.holdings || {}).filter(k => detail.holdings[k].q > 0);
+      if ($("smHoldings")) {
+        if (hKeys.length > 0) {
+          $("smHoldings").innerHTML = hKeys.map(k => {
+            const h = detail.holdings[k];
+            const pName = P[k] ? P[k].name : k;
+            return `<div><span>${pName}</span><span>${h.q} shares (avg ₹${Number(h.avg).toFixed(1)})</span></div>`;
+          }).join("");
+        } else {
+          $("smHoldings").innerHTML = `<div class="dim" style="border:0">No campus shares held.</div>`;
+        }
+      }
+    } else {
+      if ($("smCash")) $("smCash").textContent = inr(10000);
+      if ($("smNet")) $("smNet").textContent = inr(10000);
+      if ($("smLoc")) $("smLoc").textContent = "On campus";
+      if ($("smHoldings")) $("smHoldings").innerHTML = `<div class="dim" style="border:0">No campus shares held.</div>`;
+    }
+  } catch (e) {
+    if ($("smCash")) $("smCash").textContent = inr(10000);
+    if ($("smNet")) $("smNet").textContent = inr(10000);
+    if ($("smLoc")) $("smLoc").textContent = "On campus";
+    if ($("smHoldings")) $("smHoldings").innerHTML = `<div class="dim" style="border:0">No campus shares held.</div>`;
+  }
+};
+
+if ($("closeStudentModal")) $("closeStudentModal").onclick = () => { $("studentModal").style.display = "none"; };
 
 function startWavePolling() {
   if (WAVE_TIMER) clearInterval(WAVE_TIMER);
@@ -899,10 +1020,8 @@ $("waveBell").onclick = () => {
 /* ===== LOST & FOUND TAB ===== */
 let LF_ITEMS = [];
 const SAMPLE_ITEMS = [
-  { itemId: "s1", type: "lost", title: "Blue water bottle", description: "Lost near A Block after 10am class", placeId: "a", reportedBy: "arjun", contact: "arjun@snu.edu.in", status: "open", createdAt: Date.now() / 1000 - 3600 },
-  { itemId: "s2", type: "found", title: "Black umbrella", description: "Found at CnD counter", placeId: "cnd", reportedBy: "priya", contact: "priya@snu.edu.in", status: "open", createdAt: Date.now() / 1000 - 7200 },
-  { itemId: "s3", type: "lost", title: "Notebook with green cover", description: "Left in Central Library 2nd floor", placeId: "lib", reportedBy: "rahul", contact: "wa.me/91xxxxxxxxxx", status: "open", createdAt: Date.now() / 1000 - 1800 },
-  { itemId: "s4", type: "found", title: "ID card - Neha R.", description: "Found on basketball court bench", placeId: "bask", reportedBy: "aman", contact: "aman@snu.edu.in", status: "open", createdAt: Date.now() / 1000 - 600 },
+  { itemId: "s1", type: "lost", title: "Blue water bottle", description: "Left near the library entrance", placeId: "lib", reportedBy: "anonymous.demo@snu.edu.in", reporterName: "Anonymous", contact: "anonymous.demo@snu.edu.in", status: "open", createdAt: Date.now() / 1000 - 3600 },
+  { itemId: "s2", type: "found", title: "Black earphones case", description: "Found at DH 2", placeId: "dh2", reportedBy: "piyush.demo@snu.edu.in", reporterName: "Piyush Singh", contact: "piyush.demo@snu.edu.in", status: "open", createdAt: Date.now() / 1000 - 7200 },
 ];
 
 function initLfDropdowns() {
@@ -1086,26 +1205,38 @@ async function uploadPhoto() {
 }
 
 $("lfSubmit").onclick = async () => {
+  const btn = $("lfSubmit");
   const title = $("lfTitle").value.trim(), desc = $("lfDesc").value.trim(), place = $("lfPlace").value, contact = $("lfContact").value.trim(), type = $("lfType").value;
   if (!title || !place || !contact) { toast("Fill in title, place, and contact!"); return; }
-  if (apiOk()) {
+
+  btn.disabled = true;
+  try {
     let imageKey = null;
     if (lfPhotoBlob) {
-      $("lfSubmit").disabled = true; $("lfSubmit").textContent = "Uploading photo…";
+      btn.textContent = "Uploading photo…";
       imageKey = await uploadPhoto();
-      $("lfSubmit").disabled = false; $("lfSubmit").textContent = "Submit report";
     }
+    btn.textContent = "Saving report…";
     const payload = { type, title, description: desc, placeId: place, contact };
     if (imageKey) payload.imageKey = imageKey;
-    apiPost("/items", payload)
-      .then(() => { toast("Report submitted!"); $("lfModal").style.display = "none"; resetLfPhoto(); loadLostFound(); })
-      .catch(() => toast("Submission failed."));
-  } else {
-    LF_ITEMS.unshift({ itemId: "local_" + Date.now(), type, title, description: desc, placeId: place, reportedBy: currentName(), contact, status: "open", createdAt: Date.now() / 1000 });
-    toast("Report submitted (offline)");
-    $("lfModal").style.display = "none"; resetLfPhoto();
-    renderLfGrid(LF_ITEMS);
-    updateLostBadges(LF_ITEMS);
+
+    if (apiOk()) {
+      await apiPost("/items", payload);
+      toast("Report submitted!");
+    } else {
+      LF_ITEMS.unshift({ itemId: "local_" + Date.now(), type, title, description: desc, placeId: place, reportedBy: currentName(), contact, status: "open", createdAt: Date.now() / 1000 });
+      toast("Report submitted (offline)");
+    }
+    $("lfModal").style.display = "none";
+    resetLfPhoto();
+    $("lfTitle").value = "";
+    $("lfDesc").value = "";
+    loadLostFound();
+  } catch (err) {
+    toast(err.body?.error || err.message || "Submission failed. Please try again.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Submit report";
   }
 };
 

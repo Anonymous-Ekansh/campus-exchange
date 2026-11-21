@@ -529,9 +529,9 @@ def handler(event, context):
 
         # ---------- LEADERBOARD (Public) ----------
         if method == "GET" and path == "/leaderboard":
-            items = portfolios.scan().get("Items", [])
+            p_items = portfolios.scan().get("Items", [])
             lb = []
-            for it in items:
+            for it in p_items:
                 cash = float(it.get("cash", 10000))
                 nw = cash
                 for pid, h in it.get("holdings", {}).items():
@@ -573,6 +573,56 @@ def handler(event, context):
                 kwargs["ExpressionAttributeValues"] = eav
             its = profiles.scan(**kwargs).get("Items", [])
             return resp(200, its)
+
+        # ---------- STUDENT DETAIL (Auth required) ----------
+        if method == "GET" and path == "/student-detail":
+            target_user = qs.get("user", "")
+            if not target_user:
+                return resp(400, {"error": "Missing user param."})
+            prof = profiles.get_item(Key={"username": target_user}).get("Item")
+            if not prof:
+                profs = profiles.scan(FilterExpression=Attr("username").eq(target_user)).get("Items", [])
+                prof = profs[0] if profs else {}
+
+            pf = portfolios.get_item(Key={"username": target_user}).get("Item") or {}
+            cash = float(pf.get("cash", 10000))
+            holdings = pf.get("holdings", {})
+            visited = pf.get("visitedPlaces", [])
+
+            # Compute live net worth
+            net_worth = cash
+            for pid, h in holdings.items():
+                q = int(h.get("q", 0))
+                if q > 0 and pid in PLACES_DICT:
+                    net_worth += q * calc_price(pid, now, 0)
+
+            # Find latest checkin for this user
+            recent_checkins = checkins.scan(
+                FilterExpression=Attr("username").eq(target_user) & Attr("real").eq(True)
+            ).get("Items", [])
+            recent_checkins.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+            latest_checkin = None
+            if recent_checkins:
+                pid = recent_checkins[0].get("placeId")
+                latest_checkin = {
+                    "placeId": pid,
+                    "placeName": PLACES_DICT.get(pid, {}).get("name", pid),
+                    "timestamp": recent_checkins[0].get("timestamp")
+                }
+
+            return resp(200, {
+                "username": target_user,
+                "displayName": prof.get("displayName") or pf.get("displayName") or target_user.split("@")[0],
+                "department": prof.get("department", ""),
+                "batch": prof.get("batch", ""),
+                "interests": prof.get("interests", []),
+                "avatarColor": prof.get("avatarColor", "#D62FA8"),
+                "cash": round(cash, 2),
+                "netWorth": round(net_worth, 2),
+                "holdings": holdings,
+                "visitedPlaces": visited,
+                "latestCheckin": latest_checkin
+            })
 
         # ---------- JOIN (Auth required) ----------
         if method == "POST" and path == "/join":
