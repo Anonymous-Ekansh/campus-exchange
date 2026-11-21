@@ -240,6 +240,16 @@
   <label class="dim">Where?</label>
   <select id="lfPlace" style="width:100%;margin-bottom:10px"></select>
   <input id="lfContact" placeholder="Your contact (WhatsApp / email)" maxlength="60" autocomplete="off">
+  <label class="dim">Photo (optional)</label>
+  <div class="lf-photo-picker">
+    <input type="file" id="lfPhoto" accept="image/*" capture="environment" style="display:none">
+    <button class="btn-outline btn-sm" id="lfPhotoBtn" type="button">📷 Add photo</button>
+    <span class="dim" id="lfPhotoName" style="margin-left:8px"></span>
+  </div>
+  <div id="lfPhotoPreview" class="lf-photo-preview" style="display:none">
+    <img id="lfPreviewImg" alt="Preview">
+    <button class="btn-outline btn-sm" id="lfPhotoRemove" type="button">✕ Remove</button>
+  </div>
   <input type="hidden" id="lfType" value="lost">
   <button class="btn-mag btn-full" id="lfSubmit">Submit report</button>
   <button class="btn-outline btn-full" id="lfCancel" style="margin-top:8px">Cancel</button>

@@ -1,14 +1,15 @@
 """
 SNU Campus Exchange – single Lambda handler for HTTP API Gateway.
-Region: ap-south-1 | Runtime: Python 3.12
+Region: ap-southeast-2 | Runtime: Python 3.12
 Tables: Players, Checkins, Profiles, Memberships, Waves, Items, Ratings, Users
 Auth: PBKDF2 password hashing, HMAC-SHA256 signed tokens (7-day expiry)
 """
 import boto3, json, time, uuid, hashlib, hmac, os, base64
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key, Attr
+from botocore.config import Config as BotoConfig
 
-ddb = boto3.resource("dynamodb", region_name="ap-south-1")
+ddb = boto3.resource("dynamodb", region_name="ap-southeast-2")
 players     = ddb.Table("Players")
 checkins    = ddb.Table("Checkins")
 profiles    = ddb.Table("Profiles")
@@ -17,6 +18,9 @@ waves       = ddb.Table("Waves")
 items       = ddb.Table("Items")
 ratings     = ddb.Table("Ratings")
 users       = ddb.Table("Users")
+
+S3_BUCKET = os.environ.get("S3_BUCKET", "snu-campus-exchange-uploads")
+s3 = boto3.client("s3", region_name="ap-southeast-2", config=BotoConfig(signature_version="s3v4"))
 
 AUTH_SECRET = os.environ.get("AUTH_SECRET", "dev-secret-change-me")
 TOKEN_EXPIRY = 7 * 24 * 3600  # 7 days
@@ -265,10 +269,20 @@ def handler(event, context):
             out = [{"fromUser": i["fromUser"], "timestamp": i["timestamp"]} for i in its]
             return resp(200, out)
 
+        # ---------- UPLOAD URL (S3 presigned) ----------
+        if route == "POST /upload-url":
+            key = "items/" + str(uuid.uuid4()) + ".jpg"
+            url = s3.generate_presigned_url(
+                "put_object",
+                Params={"Bucket": S3_BUCKET, "Key": key, "ContentType": "image/jpeg"},
+                ExpiresIn=300,
+            )
+            return resp(200, {"uploadUrl": url, "key": key})
+
         # ---------- POST ITEM (Lost & Found) ----------
         if route == "POST /items":
             item_id = str(uuid.uuid4())[:8]
-            items.put_item(Item={
+            item = {
                 "itemId":      item_id,
                 "type":        body.get("type", "lost"),
                 "title":       body.get("title", ""),
@@ -279,7 +293,10 @@ def handler(event, context):
                 "contact":     body.get("contact", email),
                 "status":      "open",
                 "createdAt":   now,
-            })
+            }
+            if body.get("imageKey"):
+                item["imageKey"] = body["imageKey"]
+            items.put_item(Item=item)
             return resp(200, {"success": True, "itemId": item_id})
 
         # ---------- GET ITEMS ----------

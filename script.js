@@ -1,5 +1,6 @@
 /* ===== API ===== */
 const API_URL = "PASTE_URL_HERE";   // ← paste your HTTP API invoke URL here
+const S3_BASE  = "PASTE_S3_URL_HERE"; // ← e.g. https://snu-campus-exchange-uploads.s3.ap-southeast-2.amazonaws.com
 const apiOk = () => API_URL && API_URL !== "PASTE_URL_HERE";
 
 /* ===== EDIT ME ===== */
@@ -778,10 +779,17 @@ function renderLfGrid(items) {
     const pName = P[it.placeId] ? P[it.placeId].name : it.placeId;
     const isMine = it.reportedBy === myEmail;
     const reporterDisplay = it.reporterName || it.reportedBy || "";
+    const photoUrl = it.imageKey && S3_BASE && S3_BASE !== "PASTE_S3_URL_HERE" ? S3_BASE + "/" + it.imageKey : "";
+    const photoHtml = photoUrl
+      ? `<div class="lf-photo-wrap"><img src="${photoUrl}" alt="${(it.title||"").replace(/"/g,"")}" onerror="this.parentNode.outerHTML='<div class=\\'lf-photo-placeholder\\'>📷 Photo unavailable</div>'"></div>`
+      : it.imageKey
+        ? `<div class="lf-photo-placeholder">📷 Photo (configure S3 URL)</div>`
+        : `<div class="lf-photo-placeholder">📷 No photo</div>`;
     return `<div class="lf-card">
       <div class="lf-tag ${it.type}">${it.type.toUpperCase()}</div>
       ${isMine ? '<span class="lf-mine-tag">Mine</span>' : ''}
       <div class="lf-title">${(it.title || "").replace(/[<>&]/g, "")}</div>
+      ${photoHtml}
       <div class="lf-desc">${(it.description || "").replace(/[<>&]/g, "")}</div>
       <div class="lf-place">📍 ${pName}</div>
       <div class="lf-time">${ago} · by ${reporterDisplay.replace(/[<>&]/g, "")}</div>
@@ -848,21 +856,89 @@ function updateLostBadges(items) {
   });
 }
 
-$("reportLost").onclick = () => { $("lfType").value = "lost"; $("lfModalTitle").textContent = "I lost something"; $("lfModal").style.display = "grid"; initLfDropdowns(); $("lfContact").value = currentEmail(); };
-$("reportFound").onclick = () => { $("lfType").value = "found"; $("lfModalTitle").textContent = "I found something"; $("lfModal").style.display = "grid"; initLfDropdowns(); $("lfContact").value = currentEmail(); };
-$("lfCancel").onclick = () => { $("lfModal").style.display = "none"; };
+$("reportLost").onclick = () => { $("lfType").value = "lost"; $("lfModalTitle").textContent = "I lost something"; $("lfModal").style.display = "grid"; initLfDropdowns(); $("lfContact").value = currentEmail(); resetLfPhoto(); };
+$("reportFound").onclick = () => { $("lfType").value = "found"; $("lfModalTitle").textContent = "I found something"; $("lfModal").style.display = "grid"; initLfDropdowns(); $("lfContact").value = currentEmail(); resetLfPhoto(); };
+$("lfCancel").onclick = () => { $("lfModal").style.display = "none"; resetLfPhoto(); };
+
+/* ===== PHOTO UPLOAD HELPERS ===== */
+let lfPhotoBlob = null; // the resized JPEG blob ready for upload
+
+function resetLfPhoto() {
+  lfPhotoBlob = null;
+  if ($("lfPhoto")) $("lfPhoto").value = "";
+  if ($("lfPhotoName")) $("lfPhotoName").textContent = "";
+  if ($("lfPhotoPreview")) $("lfPhotoPreview").style.display = "none";
+}
+
+function resizeImage(file, maxW, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject("Resize failed"), "image/jpeg", quality);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+if ($("lfPhotoBtn")) $("lfPhotoBtn").onclick = () => $("lfPhoto").click();
+if ($("lfPhoto")) $("lfPhoto").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    lfPhotoBlob = await resizeImage(file, 800, 0.8);
+    $("lfPhotoName").textContent = file.name.slice(0, 25);
+    $("lfPreviewImg").src = URL.createObjectURL(lfPhotoBlob);
+    $("lfPhotoPreview").style.display = "block";
+  } catch (err) {
+    toast("Could not process photo."); lfPhotoBlob = null;
+  }
+};
+if ($("lfPhotoRemove")) $("lfPhotoRemove").onclick = resetLfPhoto;
+
+async function uploadPhoto() {
+  if (!lfPhotoBlob || !apiOk()) return null;
+  try {
+    const { uploadUrl, key } = await apiPost("/upload-url", {});
+    const putRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+      body: lfPhotoBlob,
+    });
+    if (!putRes.ok) throw new Error("S3 PUT " + putRes.status);
+    return key;
+  } catch (e) {
+    console.warn("Photo upload failed:", e);
+    toast("Photo upload failed. Saving without photo.");
+    return null;
+  }
+}
 
 $("lfSubmit").onclick = async () => {
   const title = $("lfTitle").value.trim(), desc = $("lfDesc").value.trim(), place = $("lfPlace").value, contact = $("lfContact").value.trim(), type = $("lfType").value;
   if (!title || !place || !contact) { toast("Fill in title, place, and contact!"); return; }
   if (apiOk()) {
-    apiPost("/items", { type, title, description: desc, placeId: place, contact })
-      .then(() => { toast("✅ Report submitted!"); $("lfModal").style.display = "none"; loadLostFound(); })
+    // Upload photo first if present
+    let imageKey = null;
+    if (lfPhotoBlob) {
+      $("lfSubmit").disabled = true; $("lfSubmit").textContent = "Uploading photo…";
+      imageKey = await uploadPhoto();
+      $("lfSubmit").disabled = false; $("lfSubmit").textContent = "Submit report";
+    }
+    const payload = { type, title, description: desc, placeId: place, contact };
+    if (imageKey) payload.imageKey = imageKey;
+    apiPost("/items", payload)
+      .then(() => { toast("✅ Report submitted!"); $("lfModal").style.display = "none"; resetLfPhoto(); loadLostFound(); })
       .catch(() => toast("Submission failed."));
   } else {
     LF_ITEMS.unshift({ itemId: "local_" + Date.now(), type, title, description: desc, placeId: place, reportedBy: currentName(), contact, status: "open", createdAt: Date.now() / 1000 });
     toast("✅ Report submitted (offline)");
-    $("lfModal").style.display = "none";
+    $("lfModal").style.display = "none"; resetLfPhoto();
     renderLfGrid(LF_ITEMS);
     updateLostBadges(LF_ITEMS);
   }

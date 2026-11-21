@@ -21,8 +21,9 @@
 |---|---|
 | **AWS Amplify** | Static site hosting (HTML/CSS/JS) |
 | **AWS Lambda** | Serverless backend (Python 3.12, single function) |
-| **API Gateway** | HTTP API with CORS (18 routes) |
-| **DynamoDB** | 7 on-demand tables: Players, Checkins, Profiles, Memberships, Waves, Items, Ratings |
+| **API Gateway** | HTTP API with CORS |
+| **DynamoDB** | 8 on-demand tables: Players, Checkins, Profiles, Memberships, Waves, Items, Ratings, Users |
+| **Amazon S3** | Photo uploads for Lost & Found items (presigned PUT URLs) |
 
 ## DynamoDB Tables
 
@@ -33,8 +34,9 @@
 | Profiles | `username` (S) | — | department, batch, interests, avatarColor |
 | Memberships | `community` (S) | `username` (S) | |
 | Waves | `toUser` (S) | `timestamp` (N) | fromUser |
-| Items | `itemId` (S) | — | Lost & Found: type, title, placeId, status |
+| Items | `itemId` (S) | — | Lost & Found: type, title, placeId, status, imageKey |
 | Ratings | `placeId` (S) | `timestamp` (N) | stars, tag |
+| Users | `email` (S) | — | Auth: name, salt, pwHash |
 
 ## Live URL
 
@@ -59,5 +61,6 @@ This sends 15 fake check-ins weighted towards the mess and library, so "Packed" 
 ## Architecture
 
 ```
-Browser (Amplify) → HTTP API Gateway (CORS: *) → Lambda (Python 3.12) → DynamoDB (7 tables)
+Browser (Amplify) → HTTP API Gateway (CORS: *) → Lambda (Python 3.12) → DynamoDB (8 tables)
+                                                                       → S3 (photo uploads)
 ```
