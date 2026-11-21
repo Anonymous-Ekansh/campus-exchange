@@ -17,6 +17,10 @@ node_modules/
 *secret*
 *credentials*
 
+# Python
+__pycache__/
+*.pyc
+
 # IDE
 .vscode/
 .idea/

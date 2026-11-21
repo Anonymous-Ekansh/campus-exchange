@@ -60,7 +60,7 @@ const currentEmail = () => AUTH_USER ? AUTH_USER.email : "";
 const currentName = () => AUTH_USER ? AUTH_USER.name : "";
 
 let SERVER_PRICES = {};    // { placeId: { price, prevHourPrice } }
-let SERVER_PORTFOLIO = { cash: 10000, holdings: {}, bonusPlaces: [], netWorth: 10000, dayKey: "" };
+let SERVER_PORTFOLIO = { cash: 10000, holdings: {}, visitedPlaces: [], netWorth: 10000 };
 let CROWD_DATA = {};
 let SELECTED_PLACE = "lib";
 let CURRENT_NEWS = "";
@@ -70,6 +70,96 @@ let toastT = null;
 let POLL_TIMER = null;
 let CLOCK_TIMER = null;
 let WAVE_TIMER = null;
+
+/* ===== MAP WALKING ANIMATION ===== */
+let PLAYER_LOC = "lib";
+let WALK = null; // { toId, startPos, startTime, dur }
+let animFrameId = null;
+
+function updateAvatar(x, y, isWalking) {
+  const me = $("me");
+  if (!me) return;
+  me.style.display = "block";
+  me.setAttribute("transform", `translate(${x},${y})`);
+  me.classList.toggle("walking", !!isWalking);
+}
+
+function getAvatarPos() {
+  if (!WALK) {
+    const p = P[PLAYER_LOC] || P["lib"];
+    return { x: p.x, y: p.y - 26 };
+  }
+  const now = performance.now();
+  const k = Math.min(1, Math.max(0, (now - WALK.startTime) / WALK.dur));
+  const a = WALK.startPos;
+  const b = P[WALK.toId];
+  const curX = a.x + (b.x - a.x) * k;
+  const curY = a.y + (b.y - a.y) * k;
+  return { x: curX, y: curY - 6 };
+}
+
+function walkTo(targetPlaceId) {
+  const target = P[targetPlaceId];
+  if (!target) return;
+
+  const current = getAvatarPos();
+  const dist = Math.hypot(target.x - current.x, target.y - 26 - current.y);
+  if (dist < 4) {
+    PLAYER_LOC = targetPlaceId;
+    WALK = null;
+    const trail = $("trail");
+    if (trail) { trail.setAttribute("d", ""); trail.style.display = "none"; }
+    updateAvatar(target.x, target.y - 26, false);
+    return;
+  }
+
+  const speed = 260; // pixels per second
+  const dur = Math.max(250, (dist / speed) * 1000);
+  const fromPos = WALK ? { x: current.x, y: current.y + 6 } : { x: P[PLAYER_LOC].x, y: P[PLAYER_LOC].y };
+
+  WALK = {
+    toId: targetPlaceId,
+    startPos: fromPos,
+    startTime: performance.now(),
+    dur
+  };
+
+  const trail = $("trail");
+  if (trail) {
+    trail.style.display = "block";
+    trail.setAttribute("d", `M${fromPos.x} ${fromPos.y}L${target.x} ${target.y}`);
+  }
+
+  if (!animFrameId) {
+    animFrameId = requestAnimationFrame(animStep);
+  }
+}
+
+function animStep(now) {
+  if (!WALK) {
+    animFrameId = null;
+    return;
+  }
+  const k = Math.min(1, (now - WALK.startTime) / WALK.dur);
+  const a = WALK.startPos;
+  const b = P[WALK.toId];
+  const curX = a.x + (b.x - a.x) * k;
+  const curY = a.y + (b.y - a.y) * k;
+
+  updateAvatar(curX, curY - 6, true);
+
+  if (k >= 1) {
+    PLAYER_LOC = WALK.toId;
+    WALK = null;
+    animFrameId = null;
+    const trail = $("trail");
+    if (trail) { trail.setAttribute("d", ""); trail.style.display = "none"; }
+    const finalP = P[PLAYER_LOC];
+    updateAvatar(finalP.x, finalP.y - 26, false);
+  } else {
+    animFrameId = requestAnimationFrame(animStep);
+  }
+}
 
 /* ===== SKY TINT (IST) ===== */
 const SKY = [[8, "#ffd29a", .22], [11, "#ffffff", 0], [15, "#ffffff", 0], [17.5, "#ff9a4d", .24], [20, "#4b4aa0", .26], [24, "#2a2f6e", .34]];
@@ -285,6 +375,8 @@ function initRealCheckin() {
       } else {
         toast("Checked in at " + P[pid].name + "!");
       }
+      SELECTED_PLACE = pid;
+      walkTo(pid);
       // Refresh portfolio and crowd
       const [pf, cr] = await Promise.all([
         apiGet("/portfolio").catch(() => null),
@@ -348,11 +440,14 @@ function buildMap() {
     const g = e.target.closest(".tile");
     if (g) {
       SELECTED_PLACE = g.dataset.id;
+      walkTo(SELECTED_PLACE);
       render();
     }
   };
-  if ($("me")) $("me").style.display = "none";
-  if ($("trail")) $("trail").style.display = "none";
+  const initP = P[PLAYER_LOC] || P["lib"];
+  updateAvatar(initP.x, initP.y - 26, false);
+  const trail = $("trail");
+  if (trail) { trail.style.display = "none"; trail.setAttribute("d", ""); }
 }
 
 function news(t) {
@@ -393,13 +488,13 @@ function render() {
   // Header stickers
   const cash = SERVER_PORTFOLIO.cash || 0;
   const netWorth = SERVER_PORTFOLIO.netWorth || cash;
-  const bonusCount = (SERVER_PORTFOLIO.bonusPlaces || []).length;
+  const visitedCount = (SERVER_PORTFOLIO.visitedPlaces || SERVER_PORTFOLIO.bonusPlaces || []).length;
   if ($("cash")) $("cash").textContent = inr(cash);
   if ($("net")) {
     $("net").textContent = inr(netWorth);
     $("net").style.color = netWorth >= 10000 ? "var(--up)" : "var(--down)";
   }
-  if ($("visits")) $("visits").textContent = bonusCount + "/" + PLACES.length;
+  if ($("visits")) $("visits").textContent = visitedCount + "/" + PLACES.length;
 
   // Selected place card
   const p = P[SELECTED_PLACE] || P["lib"];
@@ -559,7 +654,7 @@ async function fetchLeaderboard() {
 
 function renderLb() {
   const rows = REMOTE_LB || [];
-  const html = rows.length ? rows.map((u, i) => `<div><span>${i + 1}. ${(u.name || "").replace(/[<>&]/g, "")}</span><b>${inr(u.best)}</b></div>`).join("") : `<div class="empty-sticker">No scores yet today. Be the first.</div>`;
+  const html = rows.length ? rows.map((u, i) => `<div><span>${i + 1}. ${(u.name || "").replace(/[<>&]/g, "")}</span><b>${inr(u.best)}</b></div>`).join("") : `<div class="empty-sticker">No scores yet. Be the first.</div>`;
   if ($("lb")) $("lb").innerHTML = html;
 }
 
@@ -615,7 +710,7 @@ function logout() {
   AUTH_TOKEN = null;
   AUTH_USER = null;
   MY_PROFILE = null;
-  SERVER_PORTFOLIO = { cash: 10000, holdings: {}, bonusPlaces: [], netWorth: 10000, dayKey: "" };
+  SERVER_PORTFOLIO = { cash: 10000, holdings: {}, visitedPlaces: [], netWorth: 10000 };
   SERVER_PRICES = {};
   CROWD_DATA = {};
   CURRENT_NEWS = "";

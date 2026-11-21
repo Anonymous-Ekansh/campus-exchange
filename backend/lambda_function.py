@@ -13,7 +13,6 @@ from botocore.config import Config as BotoConfig
 REGION = "ap-southeast-2"
 
 ddb = boto3.resource("dynamodb", region_name=REGION)
-players     = ddb.Table("Players")
 checkins    = ddb.Table("Checkins")
 profiles    = ddb.Table("Profiles")
 memberships = ddb.Table("Memberships")
@@ -167,21 +166,20 @@ def get_place_crowd30(place_id, now_ts):
     return len(its)
 
 def get_or_create_portfolio(email, uname=None, now_ts=None):
-    """Fetch user portfolio from Portfolios table; lazily reset if missing or new IST day."""
+    """Fetch user portfolio from Portfolios table; never resets so cash and holdings persist permanently."""
     if now_ts is None:
         now_ts = int(time.time())
-    today_key, _ = get_ist_time(now_ts)
     item = portfolios.get_item(Key={"username": email}).get("Item")
-    if not item or item.get("dayKey") != today_key:
-        display_name = uname or (item.get("displayName") if item else email.split("@")[0])
+    if not item:
+        display_name = uname or email.split("@")[0]
         item = {
             "username": email,
             "displayName": display_name,
             "cash": Decimal("10000"),
             "holdings": {},
-            "bonusPlaces": [],
+            "visitedPlaces": [],
             "version": 0,
-            "dayKey": today_key,
+            "createdAt": now_ts,
             "updatedAt": now_ts
         }
         portfolios.put_item(Item=item)
@@ -270,7 +268,17 @@ def handler(event, context):
         if method == "OPTIONS":
             return resp(200, {"ok": True})
 
-        body = json.loads(event.get("body") or "{}")
+        raw_body = event.get("body")
+        if isinstance(raw_body, dict):
+            body = raw_body
+        elif isinstance(raw_body, str) and raw_body:
+            try:
+                body = json.loads(raw_body)
+            except Exception:
+                body = {}
+        else:
+            body = {}
+
         qs   = event.get("queryStringParameters") or {}
         now  = int(time.time())
 
@@ -351,9 +359,8 @@ def handler(event, context):
             return resp(200, {
                 "cash": cash,
                 "holdings": holdings,
-                "bonusPlaces": pf.get("bonusPlaces", []),
-                "netWorth": round(net_worth, 2),
-                "dayKey": pf.get("dayKey")
+                "visitedPlaces": pf.get("visitedPlaces", []),
+                "netWorth": round(net_worth, 2)
             })
 
         # ---------- POST TRADE (Auth required) ----------
@@ -410,9 +417,8 @@ def handler(event, context):
                 "displayName": pf.get("displayName", email.split("@")[0]),
                 "cash": Decimal(str(new_cash)),
                 "holdings": holdings,
-                "bonusPlaces": pf.get("bonusPlaces", []),
+                "visitedPlaces": pf.get("visitedPlaces", []),
                 "version": new_version,
-                "dayKey": pf["dayKey"],
                 "updatedAt": now
             }
 
@@ -435,9 +441,8 @@ def handler(event, context):
                 "portfolio": {
                     "cash": new_cash,
                     "holdings": holdings,
-                    "bonusPlaces": updated_item["bonusPlaces"],
-                    "netWorth": round(net_worth, 2),
-                    "dayKey": updated_item["dayKey"]
+                    "visitedPlaces": updated_item["visitedPlaces"],
+                    "netWorth": round(net_worth, 2)
                 },
                 "executedPrice": current_price
             })
@@ -471,26 +476,25 @@ def handler(event, context):
                     "real":      True,
                 })
 
-            # Check bonusPlaces for today in portfolio
+            # Track visited places in portfolio permanently & award 100 bonus on first visit
             pf = get_or_create_portfolio(email, uname, now)
-            bonus_places = list(pf.get("bonusPlaces", []))
+            visited = list(pf.get("visitedPlaces", []))
             bonus = 0
-            if place_id not in bonus_places:
+            if place_id not in visited:
                 bonus = 100
-                bonus_places.append(place_id)
+                visited.append(place_id)
                 old_version = int(pf.get("version", 0))
                 new_version = old_version + 1
-                new_cash = float(pf.get("cash", 10000)) + 100
+                new_cash = Decimal(str(round(float(pf.get("cash", 10000)) + 100, 2)))
                 try:
                     portfolios.put_item(
                         Item={
                             "username": email,
                             "displayName": pf.get("displayName", email.split("@")[0]),
-                            "cash": Decimal(str(round(new_cash, 2))),
+                            "cash": new_cash,
                             "holdings": pf.get("holdings", {}),
-                            "bonusPlaces": bonus_places,
+                            "visitedPlaces": visited,
                             "version": new_version,
-                            "dayKey": pf["dayKey"],
                             "updatedAt": now
                         },
                         ConditionExpression=Attr("version").eq(old_version)
@@ -525,10 +529,7 @@ def handler(event, context):
 
         # ---------- LEADERBOARD (Public) ----------
         if method == "GET" and path == "/leaderboard":
-            today_key, _ = get_ist_time(now)
-            items = portfolios.scan(
-                FilterExpression=Attr("dayKey").eq(today_key)
-            ).get("Items", [])
+            items = portfolios.scan().get("Items", [])
             lb = []
             for it in items:
                 cash = float(it.get("cash", 10000))
