@@ -172,7 +172,7 @@ function renderCrowdPanel() {
     .filter(e => e.count > 0);
 
   if (entries.length === 0) {
-    panel.innerHTML = `<div class="empty-sticker">🏕️ Campus is quiet. Be the first to check in!</div>`;
+    panel.innerHTML = `<div class="empty-sticker">Campus is quiet. Be the first to check in!</div>`;
     return;
   }
 
@@ -231,13 +231,13 @@ function initRealCheckin() {
     REAL_CHECKIN_COOLDOWN[key] = now;
     if (apiOk()) {
       apiPost("/checkin", { placeId: pid, real: true }).then(() => {
-        toast("📍 Checked in at " + P[pid].name + "!");
+        toast("Checked in at " + P[pid].name + "!");
         fetchCrowd();
       }).catch(() => toast("Check-in failed. Try again."));
     } else {
       CROWD_DATA[pid] = (CROWD_DATA[pid] || 0) + 2;
       renderCrowdPanel();
-      toast("📍 Checked in at " + P[pid].name + " (offline)");
+      toast("Checked in at " + P[pid].name + " (offline)");
     }
   };
 }
@@ -256,7 +256,7 @@ window.seedDemoData = async function() {
   await Promise.all(promises);
   if (!apiOk()) { renderCrowdPanel(); updateBusyRings(); buildTicker(); }
   else fetchCrowd();
-  console.log("✅ 15 demo check-ins seeded (mess + library heavy)");
+  console.log("15 demo check-ins seeded (mess + library heavy)");
 };
 
 /* ===== INIT ===== */
@@ -319,7 +319,7 @@ function arrive(id) {
     S.seen.add(id);
     S.cash += 100;
     news("Checked in at " + P[id].name + ": +₹100.");
-    toast("✅ Checked in at " + P[id].name + "  +₹100");
+    toast("Checked in at " + P[id].name + "  +₹100");
     if (apiOk()) {
       apiPost("/checkin", { placeId: id }).catch(() => {});
     }
@@ -370,7 +370,7 @@ function render() {
   $("port").innerHTML = Object.keys(S.hold).filter(k => S.hold[k].q > 0).map(k => {
     const x = S.hold[k], pl = (P[k].p - x.avg) * x.q;
     return `<div><span>${P[k].name} × ${x.q}</span><b class="${pl >= 0 ? "up" : "down"}">${pl >= 0 ? "+" : "-"}${inr(Math.abs(pl))}</b></div>`;
-  }).join("") || `<div class="empty-sticker">📦 Nothing yet. Walk somewhere and buy.</div>`;
+  }).join("") || `<div class="empty-sticker">Nothing yet. Walk somewhere and buy.</div>`;
 }
 function trade(side) {
   const p = P[S.sel], q = +$("qty").value, h = S.hold[p.id] || (S.hold[p.id] = { q: 0, avg: 0 });
@@ -378,12 +378,12 @@ function trade(side) {
     const cost = p.p * q; if (cost > S.cash) { msg("Not enough cash. Try fewer shares."); return render(); }
     h.avg = (h.avg * h.q + cost) / (h.q + q); h.q += q; S.cash -= cost; p.pr += q; p.p *= 1 + q * .004;
     msg("Bought " + q + " at ₹" + p.p.toFixed(2) + ".");
-    toast("💰 Bought " + q + " shares of " + p.name);
+    toast("Bought " + q + " shares of " + p.name);
   } else {
     if (q > h.q) { msg("You don't hold that many here."); return render(); }
     h.q -= q; S.cash += p.p * q; p.pr -= q; p.p *= 1 - q * .004;
     msg("Sold " + q + " at ₹" + p.p.toFixed(2) + ".");
-    toast("📤 Sold " + q + " shares of " + p.name);
+    toast("Sold " + q + " shares of " + p.name);
   }
   render();
 }
@@ -432,12 +432,12 @@ if ($("submitRating")) $("submitRating").onclick = () => {
   if (!selectedRatingStars) { toast("Pick a star rating!"); return; }
   if (apiOk()) {
     apiPost("/rating", { placeId: pid, stars: selectedRatingStars, tag: selectedRatingTag })
-      .then(() => { toast("⭐ Rating saved!"); $("ratingCard").style.display = "none"; fetchPlaceRating(pid); })
+      .then(() => { toast("Rating saved!"); $("ratingCard").style.display = "none"; fetchPlaceRating(pid); })
       .catch(() => toast("Failed to save rating."));
   } else {
     // Offline fallback
     PLACE_RATINGS[pid] = { avg: selectedRatingStars, tag: selectedRatingTag };
-    toast("⭐ Rating saved (offline)");
+    toast("Rating saved (offline)");
     $("ratingCard").style.display = "none";
     render();
   }
@@ -473,7 +473,7 @@ async function fetchLeaderboard() {
 
 function renderLb() {
   const rows = REMOTE_LB || (loadDB().best !== null ? [{ name: currentName(), best: loadDB().best }] : []);
-  const html = rows.length ? rows.map((u, i) => `<div><span>${i + 1}. ${(u.name || "").replace(/[<>&]/g, "")}</span><b>${inr(u.best)}</b></div>`).join("") : `<div class="empty-sticker">🏆 No scores yet. Be the first.</div>`;
+  const html = rows.length ? rows.map((u, i) => `<div><span>${i + 1}. ${(u.name || "").replace(/[<>&]/g, "")}</span><b>${inr(u.best)}</b></div>`).join("") : `<div class="empty-sticker">No scores yet. Be the first.</div>`;
   $("lb").innerHTML = html; $("endLb").innerHTML = html;
 }
 
@@ -597,7 +597,7 @@ async function doAuth() {
 function saveScore(w) {
   if (apiOk()) {
     apiPost("/score", { score: Math.round(w) })
-      .then(() => { toast("🏆 Score saved!"); fetchLeaderboard(); })
+      .then(() => { toast("Score saved!"); fetchLeaderboard(); })
       .catch(() => {});
   }
   const db = loadDB();
@@ -628,7 +628,7 @@ function loadConnect() {
   } else {
     $("profilePrompt").style.display = "block";
     $("connectFilters").style.display = "none";
-    $("studentGrid").innerHTML = `<div class="empty-sticker">👋 Set up your profile to discover other students.</div>`;
+    $("studentGrid").innerHTML = `<div class="empty-sticker">Set up your profile to discover other students.</div>`;
   }
 }
 
@@ -651,8 +651,8 @@ $("saveProfile").onclick = async () => {
   MY_PROFILE = { username: currentEmail(), displayName: currentName(), department: dept, batch, interests, avatarColor: "#D62FA8" };
   localStorage.setItem("snu_profile", JSON.stringify(MY_PROFILE));
   if (apiOk()) {
-    apiPost("/profile", { department: dept, batch, interests, avatarColor: "#D62FA8" }).then(() => toast("✅ Profile saved!")).catch(() => {});
-  } else { toast("✅ Profile saved (offline)"); }
+    apiPost("/profile", { department: dept, batch, interests, avatarColor: "#D62FA8" }).then(() => toast("Profile saved!")).catch(() => {});
+  } else { toast("Profile saved (offline)"); }
   $("profileModal").style.display = "none";
   loadConnect();
 };
@@ -676,7 +676,7 @@ async function fetchStudents() {
   students = students.filter(s => s.username !== MY_PROFILE?.username);
   if (diffDept && MY_PROFILE) students = students.filter(s => s.department !== MY_PROFILE.department);
   if (!students.length) {
-    grid.innerHTML = `<div class="empty-sticker">🔍 No students found. Try different filters.</div>`;
+    grid.innerHTML = `<div class="empty-sticker">No students found. Try different filters.</div>`;
     return;
   }
   grid.innerHTML = students.map(s => {
@@ -688,7 +688,7 @@ async function fetchStudents() {
       <div class="s-name">${dispName.replace(/[<>&]/g, "")}</div>
       <div class="s-dept">${s.department || ""} · ${s.batch || ""}</div>
       <div class="s-interests">${(s.interests || []).join(", ")}</div>
-      <button class="wave-btn" onclick="sendWave('${s.username}')">👋 Wave</button>
+      <button class="wave-btn" onclick="sendWave('${s.username}')">Wave</button>
     </div>`;
   }).join("");
 }
@@ -699,8 +699,8 @@ $("filterDiffDept").onchange = fetchStudents;
 
 window.sendWave = async function(toUser) {
   if (apiOk()) {
-    apiPost("/wave", { toUser }).then(() => toast("👋 Waved at " + toUser + "!")).catch(() => toast("Wave failed."));
-  } else { toast("👋 Waved at " + toUser + " (offline)"); }
+    apiPost("/wave", { toUser }).then(() => toast("Waved at " + toUser + "!")).catch(() => toast("Wave failed."));
+  } else { toast("Waved at " + toUser + " (offline)"); }
 };
 
 function startWavePolling() {
@@ -770,7 +770,7 @@ async function loadLostFound() {
 function renderLfGrid(items) {
   const grid = $("lfGrid");
   if (!items.length) {
-    grid.innerHTML = `<div class="empty-sticker">🎒 No items reported. Campus is tidy!</div>`;
+    grid.innerHTML = `<div class="empty-sticker">No items reported. Campus is tidy!</div>`;
     return;
   }
   const myEmail = currentEmail();
@@ -781,17 +781,17 @@ function renderLfGrid(items) {
     const reporterDisplay = it.reporterName || it.reportedBy || "";
     const photoUrl = it.imageKey && S3_BASE && S3_BASE !== "PASTE_S3_URL_HERE" ? S3_BASE + "/" + it.imageKey : "";
     const photoHtml = photoUrl
-      ? `<div class="lf-photo-wrap"><img src="${photoUrl}" alt="${(it.title||"").replace(/"/g,"")}" onerror="this.parentNode.outerHTML='<div class=\\'lf-photo-placeholder\\'>📷 Photo unavailable</div>'"></div>`
+      ? `<div class="lf-photo-wrap"><img src="${photoUrl}" alt="${(it.title||"").replace(/"/g,"")}" onerror="this.parentNode.outerHTML='<div class=\\'lf-photo-placeholder\\'>Photo unavailable</div>'"></div>`
       : it.imageKey
-        ? `<div class="lf-photo-placeholder">📷 Photo (configure S3 URL)</div>`
-        : `<div class="lf-photo-placeholder">📷 No photo</div>`;
+        ? `<div class="lf-photo-placeholder">Photo (configure S3 URL)</div>`
+        : `<div class="lf-photo-placeholder">No photo</div>`;
     return `<div class="lf-card">
       <div class="lf-tag ${it.type}">${it.type.toUpperCase()}</div>
       ${isMine ? '<span class="lf-mine-tag">Mine</span>' : ''}
       <div class="lf-title">${(it.title || "").replace(/[<>&]/g, "")}</div>
       ${photoHtml}
       <div class="lf-desc">${(it.description || "").replace(/[<>&]/g, "")}</div>
-      <div class="lf-place">📍 ${pName}</div>
+      <div class="lf-place">${pName}</div>
       <div class="lf-time">${ago} · by ${reporterDisplay.replace(/[<>&]/g, "")}</div>
       <div class="lf-actions">
         <button class="btn-outline btn-sm" onclick="revealContact(this, '${(it.contact || "").replace(/'/g, "")}')">This is mine</button>
@@ -813,29 +813,29 @@ function timeAgo(ts) {
 
 window.revealContact = function(btn, contact) {
   const reveal = btn.parentNode.parentNode.querySelector(".lf-contact-reveal");
-  reveal.textContent = "📞 " + contact;
+  reveal.textContent = "Contact: " + contact;
   reveal.style.display = "block";
 };
 
 window.resolveItem = async function(itemId, btn) {
   if (apiOk()) {
-    apiPost("/items/resolve", { itemId }).then(() => { toast("✅ Marked as returned!"); loadLostFound(); }).catch(e => toast(e.body?.error || "Failed."));
+    apiPost("/items/resolve", { itemId }).then(() => { toast("Marked as returned!"); loadLostFound(); }).catch(e => toast(e.body?.error || "Failed."));
   } else {
-    btn.textContent = "Returned ✓";
+    btn.textContent = "Returned";
     btn.disabled = true;
-    toast("✅ Marked as returned (offline)");
+    toast("Marked as returned (offline)");
   }
 };
 
 window.deleteItem = async function(itemId) {
   if (!confirm("Delete this item?")) return;
   if (apiOk()) {
-    apiPost("/items/delete", { itemId }).then(() => { toast("🗑️ Item deleted."); loadLostFound(); }).catch(e => toast(e.body?.error || "Failed."));
+    apiPost("/items/delete", { itemId }).then(() => { toast("Item deleted."); loadLostFound(); }).catch(e => toast(e.body?.error || "Failed."));
   } else {
     LF_ITEMS = LF_ITEMS.filter(i => i.itemId !== itemId);
     renderLfGrid(LF_ITEMS);
     updateLostBadges(LF_ITEMS);
-    toast("🗑️ Item deleted (offline)");
+    toast("Item deleted (offline)");
   }
 };
 
@@ -933,11 +933,11 @@ $("lfSubmit").onclick = async () => {
     const payload = { type, title, description: desc, placeId: place, contact };
     if (imageKey) payload.imageKey = imageKey;
     apiPost("/items", payload)
-      .then(() => { toast("✅ Report submitted!"); $("lfModal").style.display = "none"; resetLfPhoto(); loadLostFound(); })
+      .then(() => { toast("Report submitted!"); $("lfModal").style.display = "none"; resetLfPhoto(); loadLostFound(); })
       .catch(() => toast("Submission failed."));
   } else {
     LF_ITEMS.unshift({ itemId: "local_" + Date.now(), type, title, description: desc, placeId: place, reportedBy: currentName(), contact, status: "open", createdAt: Date.now() / 1000 });
-    toast("✅ Report submitted (offline)");
+    toast("Report submitted (offline)");
     $("lfModal").style.display = "none"; resetLfPhoto();
     renderLfGrid(LF_ITEMS);
     updateLostBadges(LF_ITEMS);
